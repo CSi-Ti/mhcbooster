@@ -1,0 +1,223 @@
+import time
+import numpy as np
+import pandas as pd
+from typing import List, Union
+from koinapy import Koina
+from mhcvalidator.constants import MASS_UNIMOD_MAP
+from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from mhcvalidator.peptides import convert_mass_diff_to_unimod
+
+# Updated in Nov 5, 2024
+KOINA_PREDICTORS = {
+    'Deeplc_hela_hf': 'RT',
+    'AlphaPeptDeep_rt_generic': 'RT',
+    'Prosit_2019_irt': 'RT',
+    'Prosit_2024_irt_cit': 'RT',
+    # 'Prosit_2020_irt_TMT': 'RT', # only TMT labeled
+    'Chronologer_RT': 'RT',
+
+    'IM2Deep': 'CCS',
+    'AlphaPeptDeep_ccs_generic': 'CCS',
+
+    # 'UniSpec': 'MS2', # instrument_types, ion format, not available
+    'AlphaPeptDeep_ms2_generic': 'MS2', # instrument_types
+    'ms2pip_HCD2021': 'MS2',
+    'ms2pip_timsTOF2023': 'MS2',
+    'ms2pip_iTRAQphospho': 'MS2',
+    'ms2pip_Immuno_HCD': 'MS2',
+    'ms2pip_TTOF5600': 'MS2',
+    'ms2pip_timsTOF2024': 'MS2',
+    'ms2pip_CID_TMT': 'MS2',
+    'Prosit_2019_intensity': 'MS2',
+    'Prosit_2024_intensity_cit': 'MS2', # fragmentation_types
+    'Prosit_2023_intensity_timsTOF': 'MS2',
+    # 'Prosit_2024_intensity_PTMs_gl': 'MS2', # fragmentation_types, not available
+    'Prosit_2020_intensity_CID': 'MS2',
+    'Prosit_2020_intensity_HCD': 'MS2',
+    # 'Prosit_2024_intensity_XL_NMS2': 'MS2', # cross-linked only
+    # 'Prosit_2023_intensity_XL_CMS2': 'MS2', # cross-linked only
+    # 'Prosit_2020_intensity_TMT': 'MS2', # fragmentation_types, TMT only
+    # 'Prosit_2023_intensity_XL_CMS3': 'MS2' # MS3
+}
+
+supported_mod_map = {
+    'Prosit': ['C4', 'M35', 'n737', 'K737'],
+    'UniSpec': ['n1', 'C4', 'S21', 'T21', 'Y21', 'C26', 'E27', 'Q28', 'M35'],
+    'diann': ['n1', 'C4', 'S21', 'T21', 'Y21', 'M35', 'n121', 'K121', 'T121', 'C121', 'S121', 'n737', 'K737', 'S737'],
+    'ms2pip': ['C4', 'M35'],
+    'Deeplc': ['n1', 'C4', 'S21', 'T21', 'Y21', 'M35']
+}
+# TODO
+supported_instrument_map = {
+    'peptdeep': ['QE', 'LUMOS', 'TIMSTOF', 'SCIEXTOF'],
+    'UniSpec': ['QE', 'QEHFX', 'LUMOS', 'ELITE', 'VELOS', 'NONE']
+}
+
+class KoinaHelper(BasePredictorHelper):
+
+    def __init__(self,
+                 peptides: List[str],
+                 peptides_with_mods: List[str],
+                 charges: List[str],
+                 predictor_names: Union[str, List[str]],
+                 report_directory: str,
+                 exp_rts: np.array = None,
+                 exp_ims: np.array = None,
+                 exp_spectra: pd.DataFrame = None,
+                 high_prob_indices: np.array = None,
+                 koina_server_url: str = 'koina.wilhelmlab.org:443',
+                 mz_tolerance: float = 20,
+                 use_ppm: bool = True,
+                 instrument_type: str = 'QE',
+                 fragmentation_type: str = 'HCD',
+                 ):
+
+        if isinstance(predictor_names, str):
+            predictor_names = [predictor_names]
+
+        super().__init__(f'Koina', report_directory)
+
+        self.predictor_map = {}
+        for predictor_name in predictor_names:
+            if predictor_name not in KOINA_PREDICTORS.keys():
+                print(f'Skipping.... {predictor_name} Koina predictor is not supported')
+                continue
+            predictor_type = KOINA_PREDICTORS[predictor_name]
+            if predictor_type not in self.predictor_map.keys():
+                self.predictor_map[predictor_type] = [predictor_name]
+            else:
+                self.predictor_map[predictor_type].append(predictor_name)
+
+        self.exp_rts = exp_rts
+        self.exp_ims = exp_ims
+        self.exp_spectra = exp_spectra
+        self.mz_tolerance = mz_tolerance
+        self.use_ppm = use_ppm
+        self.instrument_type = instrument_type
+        self.fragmentation_type = fragmentation_type
+        self.charges = charges
+
+        self.peptides_no_mod = peptides
+        self.peptides_with_mods = peptides_with_mods
+        self.koina_server_url = koina_server_url
+
+        self.high_prob_indices = high_prob_indices
+
+
+    def _predict_rt(self):
+        self.peptide_df = pd.DataFrame(self.peptides, columns=['peptide_sequences'])
+        pred_df = self.model.predict(self.peptide_df)
+        return pred_df
+
+    def _predict_ccs(self):
+        self.peptide_df = pd.DataFrame(self.peptides, columns=['peptide_sequences'])
+        self.peptide_df['precursor_charges'] = self.charges
+        pred_df = self.model.predict(self.peptide_df)
+        return pred_df
+
+    def _predict_ms2(self):
+        self.peptide_df = pd.DataFrame(self.peptides, columns=['peptide_sequences'])
+        self.peptide_df['precursor_charges'] = self.charges
+        self.peptide_df['collision_energies'] = self.exp_spectra['ce'].to_numpy(dtype=np.float32)
+        self.peptide_df['instrument_types'] = np.array([self.instrument_type] * len(self.peptide_df))
+        self.peptide_df['fragmentation_types'] = np.array([self.fragmentation_type] * len(self.peptide_df))
+        self.peptide_df = self.peptide_df.reset_index(drop=False)
+        pred_df = pd.DataFrame(self.model.predict(self.peptide_df))
+
+        pred_df = (pred_df.groupby('index').agg({'intensities': list, 'mz': list, 'annotation': list})
+                   .sort_values(by=['index'], ascending=True))
+        pred_df = pred_df.rename(columns={'mz': 'mzs'})
+
+        #deal with unsupported modifications by prediction models
+        for i in range(len(pred_df)):
+            for position, mass_diff in self.unsolved_mods[i].items():
+                b_position = position
+                y_position = len(self.peptides_no_mod[i]) - position
+                for j, anno in enumerate(pred_df.loc[i, 'annotation']):
+                    ion = anno.decode('utf8')
+                    ion_type = ion[0]
+                    ion_pos = int(ion[1:-2]) # TODO
+                    ion_charge = int(ion[-1])
+                    if (ion_type == 'b' and ion_pos >= b_position) or (ion_type == 'y' and ion_pos > y_position):
+                        pred_df.loc[i, 'mzs'][j] += mass_diff / ion_charge
+
+        return pred_df
+
+    def predict_df(self) -> pd.DataFrame:
+        pred_func_map = {'RT': self._predict_rt,
+                         'CCS': self._predict_ccs,
+                         'MS2': self._predict_ms2}
+        combined_pred_df = pd.DataFrame()
+        for predictor_type in self.predictor_map.keys():
+            for predictor_name in self.predictor_map[predictor_type]:
+                supported_mods = None
+                for tool_name in supported_mod_map.keys():
+                    if tool_name in predictor_name:
+                        supported_mods = supported_mod_map[tool_name]
+                        break
+                self.peptides, self.unsolved_mods = convert_mass_diff_to_unimod(self.peptides_with_mods,
+                                                                                MASS_UNIMOD_MAP, supported_mods)
+
+                attempt = 0
+                max_retries = 5  # Maximum number of retries
+                while attempt < max_retries:
+                    try:
+                        self.model = Koina(predictor_name, self.koina_server_url)
+                        pred_df = pred_func_map[predictor_type]()
+                        break
+                    except Exception as e:
+                        print(f"Warning: {e}")
+                        attempt += 1
+                        if attempt < max_retries:
+                            print(f"Retrying in 1 minute... (Attempt {attempt}/{max_retries})")
+                            time.sleep(60)
+                        else:
+                            print("Max retries reached. Operation failed.")
+                            raise
+
+                if predictor_type == 'RT':
+                    if 'irt' in pred_df.keys():
+                        combined_pred_df[f'{predictor_name}_rt'] = pred_df['irt']
+                    else:
+                        combined_pred_df[f'{predictor_name}_rt'] = pred_df['rt']
+                elif predictor_type == 'CCS':
+                    combined_pred_df[f'{predictor_name}_ccs'] = pred_df['ccs']
+                elif predictor_type == 'MS2':
+                    combined_pred_df[f'{predictor_name}_mzs'] = pred_df['mzs']
+                    combined_pred_df[f'{predictor_name}_intensities'] = pred_df['intensities']
+
+        self.pred_df = combined_pred_df
+
+        return self.pred_df
+
+    def score_df(self) -> pd.DataFrame:
+        all_predictions = pd.DataFrame()
+        for predictor_type in self.predictor_map.keys():
+            for predictor_name in self.predictor_map[predictor_type]:
+                if predictor_type == 'RT':
+                    pred_rts = self.pred_df[f'{predictor_name}_rt'].to_numpy(dtype=np.float32)
+                    if self.high_prob_indices is None:
+                        aligned_pred_rts =  self.align_pred_to_exp_coarse(pred_rts, self.exp_rts, figure_name=f'alignment_{predictor_name}')
+                    else:
+                        aligned_pred_rts = self.align_pred_to_exp(pred_rts[self.high_prob_indices], self.exp_rts[self.high_prob_indices], pred_rts, figure_name=f'alignment_{predictor_name}')
+                    predictions = self.calc_rt_scores(self.exp_rts, aligned_pred_rts, predictor_name)
+                    all_predictions = all_predictions.join(predictions, how='outer')
+                elif predictor_type == 'CCS':
+                    pred_ims = self.pred_df[f'{predictor_name}_ccs'].to_numpy(dtype=np.float32) / self.charges
+                    if self.high_prob_indices is None:
+                        aligned_pred_ims = self.align_pred_to_exp_coarse(pred_ims, self.exp_ims, figure_name=f'alignment_{predictor_name}')
+                    else:
+                        aligned_pred_ims = self.align_pred_to_exp(pred_ims[self.high_prob_indices], self.exp_ims[self.high_prob_indices], pred_ims, figure_name=f'alignment_{predictor_name}')
+                    predictions = self.calc_im_scores(self.exp_ims, aligned_pred_ims, predictor_name)
+                    all_predictions = all_predictions.join(predictions, how='outer')
+                elif predictor_type == 'MS2':
+                    pred_ms2 = pd.DataFrame()
+                    pred_ms2['mzs'] = self.pred_df[f'{predictor_name}_mzs']
+                    pred_ms2['intensities'] = self.pred_df[f'{predictor_name}_intensities']
+                    predictions = self.calc_ms2_scores(self.exp_spectra, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
+                    # predictions = self.calc_ms2_scores_combine(self.exp_spectra, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
+                    all_predictions = all_predictions.join(predictions, how='outer')
+
+        return all_predictions
+
+
