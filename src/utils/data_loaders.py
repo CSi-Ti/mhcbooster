@@ -2,13 +2,13 @@
 # produced by some tools is ragged (e.g. proteins just run willy-nilly off to right. Not cool.)
 
 from pathlib import Path
-from typing import Union, List
+from typing import Union
 import pandas as pd
 import numpy as np
 from pyteomics import pepxml, mzid, tandem
 from os import PathLike
-from mhcvalidator.constants import COMMON_AA
-from mhcvalidator.peptides import clean_peptide_sequences
+from src.utils.constants import COMMON_AA
+from src.utils.peptide import clean_peptide_sequences
 
 sep_tag = '@@'
 

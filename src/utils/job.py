@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Union
 from datetime import datetime
 
-
 class Job:
     def __init__(self,
                  command: Union[str, List[str]],

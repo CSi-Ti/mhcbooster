@@ -5,8 +5,8 @@ import argparse
 from pathlib import Path
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mhcvalidator import __version__
-from mhcvalidator.validator import MhcValidator
+from src import __version__
+from src.main_mhcbooster import MhcValidator
 
 
 description = f"""

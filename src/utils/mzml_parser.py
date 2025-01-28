@@ -5,7 +5,7 @@ import pandas as pd
 from tqdm import tqdm
 from pyteomics import mzml
 
-from mhcvalidator.constants import PROTON_MASS
+from src.utils.constants import PROTON_MASS
 
 def _extract_rt(spectrum):
     rt = spectrum['scanList']['scan'][0]['scan start time']

@@ -1,3 +1,3 @@
-from mhcvalidator.validator import MhcValidator
+from src.main_mhcbooster import MhcValidator
 
 __version__ = '2.0.0'

@@ -11,13 +11,13 @@ from itertools import islice
 from uuid import uuid4
 from mhcnames import normalize_allele_name
 
-from mhcvalidator.alleles import prepare_class_II_alleles, prepare_class_I_alleles
-from mhcvalidator.peptides import remove_previous_and_next_aa, remove_modifications, replace_uncommon_aas
-from mhcvalidator.job import Job
+from src.utils.allele import prepare_class_II_alleles, prepare_class_I_alleles
+from src.utils.peptide import remove_previous_and_next_aa, remove_modifications, replace_uncommon_aas
+from src.utils.job import Job
 from tqdm.contrib.concurrent import process_map
 
-from mhcvalidator.constants import EPSILON
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from src.utils.constants import EPSILON
+from src.predictors.base_predictor_helper import BasePredictorHelper
 
 TMP_DIR = str(Path(tempfile.gettempdir(), 'pynetmhcpan').expanduser())
 NETMHCPAN = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + '/third_party/netMHCpan-4.1/netMHCpan'

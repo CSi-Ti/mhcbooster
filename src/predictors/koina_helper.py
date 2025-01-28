@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from typing import List, Union
 from koinapy import Koina
-from mhcvalidator.constants import MASS_UNIMOD_MAP
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
-from mhcvalidator.peptides import convert_mass_diff_to_unimod
+from src.utils.constants import MASS_UNIMOD_MAP
+from src.predictors.base_predictor_helper import BasePredictorHelper
+from src.utils.peptide import convert_mass_diff_to_unimod
 
 # Updated in Nov 5, 2024
 KOINA_PREDICTORS = {

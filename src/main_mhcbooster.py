@@ -12,25 +12,25 @@ from tensorflow.keras import backend as K
 from typing import Union, List
 from os import PathLike
 from pathlib import Path
-from mhcvalidator.data_loaders import load_file, load_pout_data
-from mhcvalidator.tools.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
-from mhcvalidator.features import prepare_features
-from mhcvalidator.predictors.netmhcpan_helper import NetMHCpanHelper
-from mhcvalidator.predictors.mhcflurry_helper import MhcFlurryHelper
-from mhcvalidator.predictors.bigmhc_helper import BigMhcHelper
-from mhcvalidator.predictors.mixmhc2pred_helper import MixMhc2PredHelper
-from mhcvalidator.predictors.peptdeep_helper import PeptDeepHelper
-from mhcvalidator.predictors.autort_helper import AutortHelper
-from mhcvalidator.predictors.deeplc_helper import DeepLCHelper
-from mhcvalidator.predictors.im2deep_helper import IM2DeepHelper
-from mhcvalidator.predictors.koina_helper import KoinaHelper, KOINA_PREDICTORS
-from mhcvalidator.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
+from src.utils.data_loaders import load_file, load_pout_data
+from src.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
+from src.utils.features import prepare_features
+from src.predictors.netmhcpan_helper import NetMHCpanHelper
+from src.predictors.mhcflurry_helper import MhcFlurryHelper
+from src.predictors.bigmhc_helper import BigMhcHelper
+from src.predictors.mixmhc2pred_helper import MixMhc2PredHelper
+from src.predictors.peptdeep_helper import PeptDeepHelper
+from src.predictors.autort_helper import AutortHelper
+from src.predictors.deeplc_helper import DeepLCHelper
+from src.predictors.im2deep_helper import IM2DeepHelper
+from src.predictors.koina_helper import KoinaHelper, KOINA_PREDICTORS
+from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 import matplotlib.pyplot as plt
 from mhcflurry.encodable_sequences import EncodableSequences
-from mhcvalidator.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
-from mhcvalidator.peptides import remove_previous_and_next_aa, clean_peptide_sequences, remove_charge, \
+from src.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
+from src.utils.peptide import remove_previous_and_next_aa, clean_peptide_sequences, remove_charge, \
     remove_modifications
-from mhcvalidator.nd_standard_scalar import NDStandardScaler
+from src.model.nd_standard_scalar import NDStandardScaler
 from copy import deepcopy
 from datetime import datetime
 import tempfile
@@ -40,7 +40,7 @@ from matplotlib.gridspec import GridSpec
 import matplotlib.backends.backend_pdf as plt_pdf
 from inspect import signature
 from matplotlib.cm import get_cmap
-from mhcvalidator.datasets import k_fold_split, k_fold_split_s, k_fold_split_so
+from src.utils.dataset import k_fold_split_s
 
 deprecation._PRINT_DEPRECATION_WARNINGS = False
 
@@ -777,13 +777,7 @@ class MhcValidator:
         # we might make the splits better if our stratification takes feature q-values into account.
         # e.g. we calculate q-values for expect value and MHC predictions, and make sure we include good examples
         # from each allele.
-        # stratification_labels = self.get_stratification_labels()
-        '''skf = list(StratifiedKFold(n_splits=n_splits,
-                                   random_state=random_seed,
-                                   shuffle=True).split(all_data, labels))'''
-        # skf = k_fold_split(peptides=peptides, k_folds=n_splits, random_state=random_seed)
         skf = k_fold_split_s(s=self.raw_data['ExpMass'].to_numpy(dtype=float), k_folds=n_splits, random_state=random_seed)
-        # skf = k_fold_split_so(peptides=peptides, s=self.raw_data['ExpMass'].to_numpy(dtype=float), k_folds=n_splits, random_state=random_seed)
 
         predictions = np.zeros_like(labels, dtype=float)
         k_splits = np.zeros_like(labels, dtype=int)
