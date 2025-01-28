@@ -14,8 +14,10 @@ from PySide2.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QVBoxLayout, QLineEdit, QFileDialog, QHBoxLayout,
                                QCheckBox, QGridLayout, QSpinBox, QGroupBox,
                                QMessageBox, QTextEdit)
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from mhcvalidator import __version__
+
+ROOT_PATH = Path(__file__).parent.parent.parent
+sys.path.append(ROOT_PATH.as_posix())
+from src import __version__
 
 
 def grid_layout(label, elements, n_same_row=4):
@@ -56,7 +58,7 @@ class MhcBoosterGUI(QWidget):
 
         # GUI window
         self.setWindowTitle('MhcBooster')
-        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'caronlab_icon.png')))
+        self.setWindowIcon(QIcon(str(Path(__file__).parent/'caronlab_icon.png')))
         # self.setGeometry(100, 100, 800, 600)
         layout = QVBoxLayout()
         layout.setContentsMargins(50, 20, 50, 10) # left, top, right, bottom
@@ -64,7 +66,7 @@ class MhcBoosterGUI(QWidget):
 
         ### INTRODUCTION
         logo_lab_label = QLabel()
-        logo_pix_map = QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'caronlab.png')).scaled(200, 150, Qt.KeepAspectRatio)
+        logo_pix_map = QPixmap(str(Path(__file__).parent/'caronlab.png')).scaled(200, 150, Qt.KeepAspectRatio)
         logo_lab_label.setPixmap(logo_pix_map)
         logo_lab_label.resize(logo_pix_map.size())
         intro_label = QLabel('The Introduction of MhcBooster should be here. GitHub. Tutorial. Cite. CaronLab.')
