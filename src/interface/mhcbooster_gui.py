@@ -530,11 +530,12 @@ class MhcBoosterWorker(QThread):
         self.quit()  # Quit the QThread event loop
         # self.wait()  # Wait for the thread to finish
 
-
-if __name__ == '__main__':
+def run():
     app = QApplication(sys.argv)
     gui = MhcBoosterGUI()
-
     gui.show()
 
     sys.exit(app.exec_())
+
+if __name__ == '__main__':
+    run()

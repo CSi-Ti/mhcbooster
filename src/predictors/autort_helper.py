@@ -11,7 +11,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from src.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class AutortHelper(BasePredictorHelper):

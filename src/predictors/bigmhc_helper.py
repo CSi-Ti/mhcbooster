@@ -9,8 +9,8 @@ import pandas as pd
 from pathlib import Path
 from typing import List
 from mhcnames import normalize_allele_name
-from mhcvalidator.constants import EPSILON
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from src.utils.constants import EPSILON
+from src.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class BigMhcHelper(BasePredictorHelper):

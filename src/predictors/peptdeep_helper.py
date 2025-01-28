@@ -3,8 +3,8 @@
 import pandas as pd
 
 from peptdeep.hla.hla_class1 import HLA1_Binding_Classifier
-from mhcvalidator.constants import EPSILON
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from src.utils.constants import EPSILON
+from src.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class PeptDeepHelper(BasePredictorHelper):

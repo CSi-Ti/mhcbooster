@@ -5,9 +5,9 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from mhcvalidator.constants import MASS_UNIMOD_MAP, UNIMOD_NAME_MAP
-from mhcvalidator.peptides import get_pos_unimod_map
-from mhcvalidator.predictors.base_predictor_helper import BasePredictorHelper
+from src.utils.constants import MASS_UNIMOD_MAP, UNIMOD_NAME_MAP
+from src.utils.peptide import get_pos_unimod_map
+from src.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class DeepLCHelper(BasePredictorHelper):

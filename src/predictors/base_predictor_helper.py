@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from mhcvalidator.constants import EPSILON
-from mhcvalidator.spectrum import match_spectra, calc_spectral_entropy, calc_forward_reverse, calc_cosine_similarity, \
+from src.utils.constants import EPSILON
+from src.utils.spectrum import match_spectra, calc_spectral_entropy, calc_forward_reverse, calc_cosine_similarity, \
     match_spectra_to_pred, remove_low_intensity_signal
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from sklearn.linear_model import RANSACRegressor
