@@ -447,7 +447,8 @@ class MhcBoosterGUI(QWidget):
             rt_predictor_param = ' '.join(rt_predictors)
             ms2_predictor_param = ' '.join(ms2_predictors)
             ccs_predictor_param = ' '.join(ccs_predictors)
-            command = f'python ../mhcvalidator/command_line.py -n {n_threads}'
+            cli_path = str(Path(__file__).parent/'mhcbooster_cli.py')
+            command = f'python {cli_path} -n {n_threads}'
             if min_pep_length and max_pep_length:
                 command += f' --min_pep_len {min_pep_length} --max_pep_len {max_pep_length}'
             if len(app_predictor_param) > 0 and len(allele_param) > 0:
