@@ -2,12 +2,15 @@
 import tempfile
 import subprocess
 import time
+import requests
+import zipfile
 
 import mhcgnomes
 import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import List
+from tqdm import tqdm
 from mhcnames import normalize_allele_name
 from src.utils.constants import EPSILON
 from src.predictors.base_predictor_helper import BasePredictorHelper
@@ -20,6 +23,11 @@ class BigMhcHelper(BasePredictorHelper):
                  report_directory: str):
         super().__init__('BigMHC', report_directory)
 
+        self.bigmhc_url = 'https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip'
+        self.bigmhc_root = Path(__file__).parent.parent.parent / 'third_party' / 'bigmhc-master'
+        if not self.bigmhc_url.exists():
+            self._fetch_bigmhc_by_url()
+
         if alleles is None or len(alleles) == 0:
             raise RuntimeError('Alleles are needed for BigMHC predictions.')
         if np.min(np.vectorize(len)(peptides)) < 8:
@@ -28,6 +36,33 @@ class BigMhcHelper(BasePredictorHelper):
         self.peptides = peptides
         self.alleles = self._format_class_I_alleles(alleles)
         self.bigmhc_exe_path = Path(__file__).parent.parent.parent / 'third_party' / 'bigmhc-master' / 'src' / 'predict.py'
+
+    def _fetch_bigmhc_by_url(self):
+        # Fetch BigMHC from GitHub
+        third_party_root = self.bigmhc_root.parent
+        if not third_party_root.exists():
+            third_party_root.mkdir()
+
+        print('Start to download BigMHC from GitHub. It will take several minutes...')
+        response = requests.get(self.bigmhc_url, stream=True)
+        if response.status_code == 200:
+            destination_path = third_party_root / 'bigmhc-master.zip'
+            with open(destination_path, 'wb') as file:
+                # Initialize tqdm progress bar with total size and chunk size
+                with tqdm(unit='B', unit_scale=True) as pbar:
+                    # Download the file in chunks
+                    for chunk in response.iter_content(chunk_size=1024):
+                        # Write the chunk to the file
+                        file.write(chunk)
+                        # Update the progress bar with the size of the chunk
+                        pbar.update(len(chunk))
+
+                print("\nDownload completed!")
+            zip_file = zipfile.ZipFile(str(destination_path))
+            zip_file.extractall(third_party_root)
+            print(f'Successfully downloaded BigMHC from GitHub and extracted to {third_party_root}')
+        else:
+            print(f'Failed to download BigMHC from GitHub. Status code: {response.status_code}')
 
     def _format_class_I_alleles(self, alleles: List[str]):
         std_alleles = []

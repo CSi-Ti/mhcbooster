@@ -51,7 +51,7 @@ class AutortHelper(BasePredictorHelper):
         print('Start to download AutoRT from GitHub. It will take several minutes...')
         response = requests.get(self.autort_url, stream=True)
         if response.status_code == 200:
-            destination_path = third_party_root / 'autort.zip'
+            destination_path = third_party_root / 'AutoRT-master.zip'
             with open(destination_path, 'wb') as file:
                 # Initialize tqdm progress bar with total size and chunk size
                 with tqdm(unit='B', unit_scale=True) as pbar:
