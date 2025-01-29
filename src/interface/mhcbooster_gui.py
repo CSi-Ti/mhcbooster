@@ -3,6 +3,7 @@ import os
 import re
 import subprocess
 import sys
+import webbrowser
 import logging
 import time
 from datetime import datetime
@@ -13,7 +14,7 @@ from PySide2.QtGui import QPixmap, QIcon, QTextCursor
 from PySide2.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QVBoxLayout, QLineEdit, QFileDialog, QHBoxLayout,
                                QCheckBox, QGridLayout, QSpinBox, QGroupBox,
-                               QMessageBox, QTextEdit)
+                               QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QSizePolicy)
 
 ROOT_PATH = Path(__file__).parent.parent.parent
 sys.path.append(ROOT_PATH.as_posix())
@@ -43,7 +44,7 @@ class MhcBoosterGUI(QWidget):
 
         self.setStyleSheet("""
                 QGroupBox {
-                    border: 1px solid lightgray;
+                    border: 1px solid #A9A9A9;
                     margin-top: 1ex;
                     padding: 5px;
                     font: bold 12px;
@@ -54,6 +55,12 @@ class MhcBoosterGUI(QWidget):
                     padding: 0 3px; /* padding from the border */
                     left: 10px;
                 }
+                QTabWidget::pane {
+                    border: 1px solid lightgray;  /* Remove the tab box */
+                    border-left: none;
+                    border-right: none;
+                    border-bottom: none;
+                }
             """)
 
         # GUI window
@@ -61,8 +68,8 @@ class MhcBoosterGUI(QWidget):
         self.setWindowIcon(QIcon(str(Path(__file__).parent/'caronlab_icon.png')))
         # self.setGeometry(100, 100, 800, 600)
         layout = QVBoxLayout()
-        layout.setContentsMargins(50, 20, 50, 10) # left, top, right, bottom
-        layout.setSpacing(30)
+        # layout.setContentsMargins(50, 20, 50, 10) # left, top, right, bottom
+        layout.setSpacing(20)
 
         ### INTRODUCTION
         logo_lab_label = QLabel()
@@ -75,13 +82,47 @@ class MhcBoosterGUI(QWidget):
         intro_layout.addWidget(intro_label)
         layout.addLayout(intro_layout)
 
+
+        self.tab_widget = QTabWidget()
+        self.add_main_tab()
+        self.add_config_tab()
+        # self.tab_run_button.clicked.connect(lambda: self.tab_stacked_widget.setCurrentIndex(0))
+        # self.tab_config_button.clicked.connect(lambda: self.tab_stacked_widget.setCurrentIndex(1))
+        layout.addWidget(self.tab_widget)
+
+        ### Footnote
+        foot_label = QLabel('CaronLab 2024')
+        foot_label.setAlignment(Qt.AlignRight)
+        layout.addWidget(foot_label)
+
+        self.setLayout(layout)
+
+
+    def add_main_tab(self):
+        main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(30, 20, 30, 20) # left, top, right, bottom
+        main_layout.setSpacing(20)
+
         ### FILE MANAGEMENT
         file_groupbox = QGroupBox('Input / Output')
         file_group_layout = QVBoxLayout()
-        file_group_layout.insertSpacing(0, 5)
-        file_group_layout.setSpacing(5)
 
-        # Input folder
+        input_format_layout = QHBoxLayout()
+        input_format_layout.setContentsMargins(0, 0, 0, 0)
+        input_format_layout.setSpacing(30)
+        self.pin_checkbox = QCheckBox('Run from PSM')
+        self.raw_checkbox = QCheckBox('Run from RAW (MSFragger)')
+        self.pin_checkbox.setChecked(True)
+        input_format_layout.addWidget(self.pin_checkbox)
+        input_format_layout.addWidget(self.raw_checkbox)
+        input_format_layout.setAlignment(Qt.AlignLeft)
+        file_group_layout.addLayout(input_format_layout)
+
+        psm_group_layout = QVBoxLayout()
+        psm_group_layout.setContentsMargins(0, 0, 0, 0)
+        psm_group_layout.setSpacing(5)
+
+        # PIN folder
         psm_path_label = QLabel('PSM folder: \t')
         self.psm_inputbox = QLineEdit()
         self.psm_inputbox.setPlaceholderText("Select input folder containing .pin files from Comet or MSFragger...")
@@ -91,7 +132,7 @@ class MhcBoosterGUI(QWidget):
         psm_layout.addWidget(psm_path_label)
         psm_layout.addWidget(self.psm_inputbox)
         psm_layout.addWidget(self.psm_button)
-        file_group_layout.addLayout(psm_layout)
+        psm_group_layout.addLayout(psm_layout)
 
         # MzML folder
         mzml_label = QLabel('mzML folder: \t')
@@ -103,21 +144,86 @@ class MhcBoosterGUI(QWidget):
         mzml_layout.addWidget(mzml_label)
         mzml_layout.addWidget(self.mzml_inputbox)
         mzml_layout.addWidget(self.mzml_button)
-        file_group_layout.addLayout(mzml_layout)
+        psm_group_layout.addLayout(mzml_layout)
 
         # Output folder
-        output_label = QLabel('Output folder: \t')
-        self.output_inputbox = QLineEdit()
-        self.output_inputbox.setPlaceholderText('Select output folder...')
-        self.output_button = QPushButton("Select")
-        self.output_button.clicked.connect(self.open_folder_dialog)
-        output_layout = QHBoxLayout()
-        output_layout.addWidget(output_label)
-        output_layout.addWidget(self.output_inputbox)
-        output_layout.addWidget(self.output_button)
-        file_group_layout.addLayout(output_layout)
+        psm_output_label = QLabel('Output folder: \t')
+        self.psm_output_inputbox = QLineEdit()
+        self.psm_output_inputbox.setPlaceholderText('Select output folder...')
+        self.psm_output_button = QPushButton("Select")
+        self.psm_output_button.clicked.connect(self.open_folder_dialog)
+        psm_output_layout = QHBoxLayout()
+        psm_output_layout.addWidget(psm_output_label)
+        psm_output_layout.addWidget(self.psm_output_inputbox)
+        psm_output_layout.addWidget(self.psm_output_button)
+        psm_group_layout.addLayout(psm_output_layout)
+
+        raw_group_layout = QVBoxLayout()
+        raw_group_layout.setContentsMargins(0, 0, 0, 0)
+        raw_group_layout.setSpacing(5)
+
+        # RAW folder
+        raw_path_label = QLabel('RAW folder: \t')
+        self.raw_inputbox = QLineEdit()
+        self.raw_inputbox.setPlaceholderText("Select input folder containing .raw/.d files...")
+        self.raw_button = QPushButton("Select")
+        self.raw_button.clicked.connect(self.open_folder_dialog)
+        raw_layout = QHBoxLayout()
+        raw_layout.addWidget(raw_path_label)
+        raw_layout.addWidget(self.raw_inputbox)
+        raw_layout.addWidget(self.raw_button)
+        raw_group_layout.addLayout(raw_layout)
+
+        # fasta file
+        fasta_label = QLabel('FASTA file: \t')
+        self.fasta_inputbox = QLineEdit()
+        self.fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file...')
+        self.fasta_button = QPushButton("Select")
+        self.fasta_button.clicked.connect(self.open_file_dialog)
+        fasta_layout = QHBoxLayout()
+        fasta_layout.addWidget(fasta_label)
+        fasta_layout.addWidget(self.fasta_inputbox)
+        fasta_layout.addWidget(self.fasta_button)
+        raw_group_layout.addLayout(fasta_layout)
+
+        # parameter file
+        param_label = QLabel('Parameter file: \t')
+        self.param_inputbox = QLineEdit()
+        self.param_inputbox.setPlaceholderText('Select fragger.params file...')
+        self.param_button = QPushButton("Select")
+        self.param_button.clicked.connect(self.open_file_dialog)
+        param_layout = QHBoxLayout()
+        param_layout.addWidget(param_label)
+        param_layout.addWidget(self.param_inputbox)
+        param_layout.addWidget(self.param_button)
+        raw_group_layout.addLayout(param_layout)
+
+        # Output folder
+        raw_output_label = QLabel('Output folder: \t')
+        self.raw_output_inputbox = QLineEdit()
+        self.raw_output_inputbox.setPlaceholderText('Select output folder...')
+        self.raw_output_button = QPushButton("Select")
+        self.raw_output_button.clicked.connect(self.open_folder_dialog)
+        raw_output_layout = QHBoxLayout()
+        raw_output_layout.addWidget(raw_output_label)
+        raw_output_layout.addWidget(self.raw_output_inputbox)
+        raw_output_layout.addWidget(self.raw_output_button)
+        raw_group_layout.addLayout(raw_output_layout)
+
+        pin_group_widget = QWidget()
+        pin_group_widget.setLayout(psm_group_layout)
+        raw_group_widget = QWidget()
+        raw_group_widget.setLayout(raw_group_layout)
+
+        self.input_stacked_widget = QStackedWidget()
+        self.input_stacked_widget.addWidget(pin_group_widget)
+        self.input_stacked_widget.addWidget(raw_group_widget)
+
+        file_group_layout.addWidget(self.input_stacked_widget)
+        self.pin_checkbox.clicked.connect(lambda: (self.raw_checkbox.setChecked(False), self.input_stacked_widget.setCurrentIndex(0)))
+        self.raw_checkbox.clicked.connect(lambda: (self.pin_checkbox.setChecked(False), self.input_stacked_widget.setCurrentIndex(1)))
         file_groupbox.setLayout(file_group_layout)
-        layout.addWidget(file_groupbox)
+        main_layout.addWidget(file_groupbox)
 
         ### MHC specific SCORES
         mhc_groupbox = QGroupBox('MHC Predictors')
@@ -154,7 +260,7 @@ class MhcBoosterGUI(QWidget):
         mhc_group_layout.addLayout(allele_layout)
 
         mhc_groupbox.setLayout(mhc_group_layout)
-        layout.addWidget(mhc_groupbox)
+        main_layout.addWidget(mhc_groupbox)
 
         ### GENERAL SCORES
         gs_groupbox = QGroupBox('General Predictors')
@@ -207,7 +313,7 @@ class MhcBoosterGUI(QWidget):
         gs_group_layout.addLayout(ap_layout)
 
         gs_groupbox.setLayout(gs_group_layout)
-        layout.addWidget(gs_groupbox)
+        main_layout.addWidget(gs_groupbox)
 
 
         ### RUN PARAMS
@@ -256,29 +362,195 @@ class MhcBoosterGUI(QWidget):
         rp_group_layout.addLayout(p1_layout)
 
         rp_groupbox.setLayout(rp_group_layout)
-        layout.addWidget(rp_groupbox)
+        main_layout.addWidget(rp_groupbox)
 
         ### Logger
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
         self.log_output.setFixedHeight(150)
-        layout.addWidget(self.log_output)
+        main_layout.addWidget(self.log_output)
 
         ### Execution
         self.button_run = QPushButton("RUN")
         self.button_run.clicked.connect(self.on_exec_clicked)
-        layout.addWidget(self.button_run)
+        main_layout.addWidget(self.button_run)
 
         self.worker_thread = MhcBoosterWorker(commands=None)
         self.worker_thread.message.connect(self.add_log)
         self.worker_thread.finished.connect(self.worker_stop)
 
-        ### Footnote
-        foot_label = QLabel('CaronLab 2024')
-        foot_label.setAlignment(Qt.AlignRight)
-        layout.addWidget(foot_label)
+        main_tab = QWidget()
+        main_tab.setLayout(main_layout)
+        self.tab_widget.addTab(main_tab, 'Identification')
 
-        self.setLayout(layout)
+
+    def add_config_tab(self):
+        config_layout = QVBoxLayout()
+        config_layout.setContentsMargins(30, 20, 30, 20) # left, top, right, bottom
+        config_layout.setSpacing(20)
+        config_layout.setAlignment(Qt.AlignTop)
+
+        # ### Introduction
+        # introduction_label = QLabel('Third-party tools')
+        # introduction_label.setStyleSheet("""
+        #     padding: 10px;
+        #     font-size: 18px;
+        #     font-weight: bold;
+        # """)
+        # introduction_layout = QVBoxLayout()
+        # introduction_layout.addWidget(introduction_label)
+        # introduction_layout.setContentsMargins(30, 20, 30, 20)
+        # config_layout.addLayout(introduction_layout)
+
+        third_party_groupbox = QGroupBox('Third-party tools')
+        third_party_layout = QVBoxLayout()
+
+        # Introduction
+        introduction_label = QLabel('MHCBooster utilizes a variety of tools for RT, MS2, and CCS scoring.'
+                                    ' Some of these tools are governed by strict licenses and must be manually'
+                                    ' downloaded and installed. Please input the paths to the downloaded'
+                                    ' zip files. And they will be automatically installed by pressing'
+                                    ' the \'Install to MHCBooster\' button.')
+        introduction_label.setWordWrap(True)
+        introduction_label_layout = QHBoxLayout()
+        introduction_label_layout.setContentsMargins(0, 10, 0, 20)
+        introduction_label_layout.addWidget(introduction_label)
+        third_party_layout.addLayout(introduction_label_layout)
+
+        # MSFragger
+        msfragger_label = QLabel('MSFragger path: \t')
+        self.msfragger_inputbox = QLineEdit()
+        self.msfragger_inputbox.setPlaceholderText("Select the path to MSFragger-4.1.zip ...")
+        self.msfragger_browse_button = QPushButton("Browse")
+        self.msfragger_browse_button.clicked.connect(self.open_file_dialog)
+        self.msfragger_download_button = QPushButton("Download")
+        self.msfragger_download_button.clicked.connect(lambda: webbrowser.open('https://msfragger-upgrader.nesvilab.org/upgrader/'))
+        msfragger_layout = QHBoxLayout()
+        msfragger_layout.addWidget(msfragger_label)
+        msfragger_layout.addWidget(self.msfragger_inputbox)
+        msfragger_layout.addWidget(self.msfragger_browse_button)
+        msfragger_layout.addWidget(self.msfragger_download_button)
+        third_party_layout.addLayout(msfragger_layout)
+
+        # AutoRT
+        autort_label = QLabel('AutoRT path: \t')
+        self.autort_inputbox = QLineEdit()
+        self.autort_inputbox.setPlaceholderText("Select the path to AutoRT-master.zip ...")
+        self.autort_browse_button = QPushButton("Browse")
+        self.autort_browse_button.clicked.connect(self.open_file_dialog)
+        self.autort_download_button = QPushButton("Download")
+        self.autort_download_button.clicked.connect(lambda: webbrowser.open('https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip'))
+        autort_layout = QHBoxLayout()
+        autort_layout.addWidget(autort_label)
+        autort_layout.addWidget(self.autort_inputbox)
+        autort_layout.addWidget(self.autort_browse_button)
+        autort_layout.addWidget(self.autort_download_button)
+        third_party_layout.addLayout(autort_layout)
+
+        # BigMHC
+        bigmhc_label = QLabel('BigMHC path: \t')
+        self.bigmhc_inputbox = QLineEdit()
+        self.bigmhc_inputbox.setPlaceholderText("Select the path to bigmhc-master.zip ...")
+        self.bigmhc_browse_button = QPushButton("Browse")
+        self.bigmhc_browse_button.clicked.connect(self.open_file_dialog)
+        self.bigmhc_download_button = QPushButton("Download")
+        self.bigmhc_download_button.clicked.connect(lambda: webbrowser.open('https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip'))
+        bigmhc_layout = QHBoxLayout()
+        bigmhc_layout.addWidget(bigmhc_label)
+        bigmhc_layout.addWidget(self.bigmhc_inputbox)
+        bigmhc_layout.addWidget(self.bigmhc_browse_button)
+        bigmhc_layout.addWidget(self.bigmhc_download_button)
+        third_party_layout.addLayout(bigmhc_layout)
+
+        # NetMHCpan
+        netmhcpan_label = QLabel('NetMHCpan path: \t')
+        self.netmhcpan_inputbox = QLineEdit()
+        self.netmhcpan_inputbox.setPlaceholderText("Select the path to netMHCpan-4.1b.Linux.tar.gz ...")
+        self.netmhcpan_browse_button = QPushButton("Browse")
+        self.netmhcpan_browse_button.clicked.connect(self.open_file_dialog)
+        self.netmhcpan_download_button = QPushButton("Download")
+        self.netmhcpan_download_button.clicked.connect(lambda: webbrowser.open('https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux'))
+        netmhcpan_layout = QHBoxLayout()
+        netmhcpan_layout.addWidget(netmhcpan_label)
+        netmhcpan_layout.addWidget(self.netmhcpan_inputbox)
+        netmhcpan_layout.addWidget(self.netmhcpan_browse_button)
+        netmhcpan_layout.addWidget(self.netmhcpan_download_button)
+        third_party_layout.addLayout(netmhcpan_layout)
+
+        # NetMHCIIpan
+        netmhcIIpan_label = QLabel('NetMHCIIpan path: \t')
+        self.netmhcIIpan_inputbox = QLineEdit()
+        self.netmhcIIpan_inputbox.setPlaceholderText("Select the path to netMHCIIpan-4.3e.Linux.tar.gz ...")
+        self.netmhcIIpan_browse_button = QPushButton("Browse")
+        self.netmhcIIpan_browse_button.clicked.connect(self.open_file_dialog)
+        self.netmhcIIpan_download_button = QPushButton("Download")
+        self.netmhcIIpan_download_button.clicked.connect(lambda: webbrowser.open('https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCIIpan&version=4.3&packageversion=4.3e&platform=Linux'))
+        netmhcIIpan_layout = QHBoxLayout()
+        netmhcIIpan_layout.addWidget(netmhcIIpan_label)
+        netmhcIIpan_layout.addWidget(self.netmhcIIpan_inputbox)
+        netmhcIIpan_layout.addWidget(self.netmhcIIpan_browse_button)
+        netmhcIIpan_layout.addWidget(self.netmhcIIpan_download_button)
+        third_party_layout.addLayout(netmhcIIpan_layout)
+
+        # MixMHC2pred
+        mixmhc2pred_label = QLabel('MixMHC2pred path: \t')
+        self.mixmhc2pred_inputbox = QLineEdit()
+        self.mixmhc2pred_inputbox.setPlaceholderText("Select the path to MixMHC2pred-master.zip ...")
+        self.mixmhc2pred_browse_button = QPushButton("Browse")
+        self.mixmhc2pred_browse_button.clicked.connect(self.open_file_dialog)
+        self.mixmhc2pred_download_button = QPushButton("Download")
+        self.mixmhc2pred_download_button.clicked.connect(lambda: webbrowser.open('https://github.com/GfellerLab/MixMHC2pred/archive/refs/heads/master.zip'))
+        mixmhc2pred_layout = QHBoxLayout()
+        mixmhc2pred_layout.addWidget(mixmhc2pred_label)
+        mixmhc2pred_layout.addWidget(self.mixmhc2pred_inputbox)
+        mixmhc2pred_layout.addWidget(self.mixmhc2pred_browse_button)
+        mixmhc2pred_layout.addWidget(self.mixmhc2pred_download_button)
+        third_party_layout.addLayout(mixmhc2pred_layout)
+        
+        extract_layout = QHBoxLayout()
+        extract_layout.setContentsMargins(0, 10, 0, 0)
+        self.extract_button = QPushButton("Install to MHCBooster")
+        extract_layout.addWidget(self.extract_button)
+        extract_layout.setAlignment(Qt.AlignRight)
+        third_party_layout.addLayout(extract_layout)
+
+        third_party_groupbox.setLayout(third_party_layout)
+        config_layout.addWidget(third_party_groupbox)
+
+        license_groupbox = QGroupBox('License')
+        license_layout = QVBoxLayout()
+        license_text = QLabel('MHCBooster is an open-source software tool released under the GNU General Public'
+                              ' License (GPL) version 3. This means that you are free to use, modify, and distribute'
+                              ' the software, as long as you adhere to the terms and conditions set forth by the GPL-3'
+                              ' license. Additionally, when using MHCBooster, please ensure that you comply with the'
+                              ' licenses of any third-party tools or libraries integrated with the software. These'
+                              ' third-party components may be subject to different licensing agreements, and it is'
+                              ' your responsibility to review and follow the relevant terms for each of them. By using'
+                              ' MHCBooster, you agree to abide by the obligations of both the GPL-3 and any applicable'
+                              ' third-party licenses.')
+        license_text.setWordWrap(True)
+        license_layout.addWidget(license_text)
+        license_groupbox.setLayout(license_layout)
+        config_layout.addWidget(license_groupbox)
+
+        cite_groupbox = QGroupBox('How to cite')
+        cite_layout = QVBoxLayout()
+        cite = ('MHCBooster: <br>'
+                'cite info<br>'
+                'Third-party tools:<br>'
+                'MSFragger:<br>'
+                'Koina:<br>')
+        cite_text = QTextEdit()
+        cite_text.setHtml(cite)
+        cite_text.setReadOnly(True)
+        cite_layout.addWidget(cite_text)
+        cite_groupbox.setLayout(cite_layout)
+        config_layout.addWidget(cite_groupbox)
+
+        config_tab = QWidget()
+        config_tab.setLayout(config_layout)
+        self.tab_widget.addTab(config_tab, 'Configuration')
+
 
     def open_folder_dialog(self):
         sender = self.sender()
@@ -291,8 +563,11 @@ class MhcBoosterGUI(QWidget):
                 self.psm_inputbox.setText(selected_path)
             elif sender == self.mzml_button:
                 self.mzml_inputbox.setText(selected_path)
-            elif sender == self.output_button:
-                self.output_inputbox.setText(selected_path)
+            elif sender == self.psm_output_button:
+                self.psm_output_inputbox.setText(selected_path)
+            elif sender == self.raw_output_button:
+                self.raw_output_inputbox.setText(selected_path)
+            # elif sender == self.msfragger_browse_button:
 
     def open_file_dialog(self):
         sender = self.sender()

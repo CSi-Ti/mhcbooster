@@ -1,45 +1,47 @@
-import sys
+from PySide2.QtWidgets import QApplication, QWidget, QTabWidget, QVBoxLayout, QPushButton, QTextEdit, QLabel, QFrame
 from PySide2.QtCore import Qt
-from PySide2.QtWidgets import QApplication, QWidget, QTabWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
-class TabExample(QWidget):
-    def __init__(self):
-        super().__init__()
+app = QApplication([])
 
-        # Set the window title and size
-        self.setWindowTitle("PySide2 Tab Example")
-        self.resize(400, 300)
+window = QWidget()
 
-        # Create the QTabWidget
-        self.tab_widget = QTabWidget()
+# Create the main layout
+main_layout = QVBoxLayout(window)
 
-        # Create the first tab page
-        tab1 = QWidget()
-        tab1_layout = QVBoxLayout()
-        tab1_layout.addWidget(QLabel("This is Tab 1"))
-        tab1_layout.addWidget(QLineEdit())  # Add a QLineEdit widget
-        tab1.setLayout(tab1_layout)
+# Create a QTabWidget
+tab_widget = QTabWidget()
 
-        # Create the second tab page
-        tab2 = QWidget()
-        tab2_layout = QVBoxLayout()
-        tab2_layout.addWidget(QLabel("This is Tab 2"))
-        tab2_layout.addWidget(QPushButton("Click me!"))  # Add a QPushButton widget
-        tab2.setLayout(tab2_layout)
+# Create some content for each tab
+tab1_content = QLabel("This is content for Tab 1")
+tab2_content = QLabel("This is content for Tab 2")
 
-        # Add the tabs to the tab widget
-        self.tab_widget.addTab(tab1, "Tab 1")
-        self.tab_widget.addTab(tab2, "Tab 2")
+# Add some tabs with buttons
+tab_widget.addTab(tab1_content, "Tab 1")
+tab_widget.addTab(tab2_content, "Tab 2")
 
-        # Create the main layout and add the tab widget
-        layout = QVBoxLayout()
-        layout.addWidget(self.tab_widget)
-        self.setLayout(layout)
+# Remove the border of the tab bar (no box around tabs)
+tab_widget.setStyleSheet("""
+    QTabWidget::pane {
+        border: none;  /* Remove the tab box */
+    }
 
-# Create the application instance and window
-app = QApplication(sys.argv)
-window = TabExample()
+    /* Add a line under the tab buttons */
+    QTabBar::top {
+        border-bottom: 2px solid #aaa;  /* Line under the entire tab bar */
+    }
+""")
+
+# Add the QTabWidget to the layout
+main_layout.addWidget(tab_widget)
+line = QFrame()
+line.setFrameShape(QFrame.HLine)  # This creates a horizontal line
+line.setFrameShadow(QFrame.Sunken)  # Optional: gives a sunken effect to the line
+main_layout.addWidget(line)  # Add the line directly below the tab bar
+# Set the layout for the window
+window.setLayout(main_layout)
+window.setWindowTitle("Tab Bar without Box")
+window.setFixedSize(400, 300)
+
 window.show()
 
-# Run the application
-sys.exit(app.exec_())
+app.exec_()
