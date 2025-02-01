@@ -25,7 +25,7 @@ class BigMhcHelper(BasePredictorHelper):
 
         self.bigmhc_url = 'https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip'
         self.bigmhc_root = Path(__file__).parent.parent.parent / 'third_party' / 'bigmhc-master'
-        if not self.bigmhc_url.exists():
+        if not self.bigmhc_root.exists():
             self._fetch_bigmhc_by_url()
 
         if alleles is None or len(alleles) == 0:
