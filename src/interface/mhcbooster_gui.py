@@ -278,11 +278,10 @@ class MhcBoosterGUI(QWidget):
 
         # MS2 score
         ms2_label = QLabel('MS2 Score:\t')
-        unsuitable_ms2_models = ['UniSpec', 'ms2pip_TTOF5600', 'Prosit_2024_intensity_XL_NMS2', 'Prosit_2023_intensity_XL_CMS2',
+        unsuitable_ms2_models = ['UniSpec', 'Prosit_2024_intensity_XL_NMS2', 'Prosit_2023_intensity_XL_CMS2',
                                  'Prosit_2023_intensity_XL_CMS3']
-        ms2_models = ['AlphaPeptDeep_ms2_generic',
-                      'ms2pip_HCD2021', 'ms2pip_Immuno_HCD',
-                      'ms2pip_timsTOF2023', 'ms2pip_timsTOF2024', 'ms2pip_iTRAQphospho', 'ms2pip_CID_TMT',
+        ms2_models = ['AlphaPeptDeep_ms2_generic', 'ms2pip_HCD2021', 'ms2pip_Immuno_HCD', 'ms2pip_timsTOF2023',
+                      'ms2pip_timsTOF2024', 'ms2pip_iTRAQphospho', 'ms2pip_TTOF5600', 'ms2pip_CID_TMT',
                       'Prosit_2019_intensity', 'Prosit_2020_intensity_HCD', 'Prosit_2020_intensity_CID',
                       'Prosit_2023_intensity_timsTOF', 'Prosit_2024_intensity_cit', 'Prosit_2020_intensity_TMT']
 

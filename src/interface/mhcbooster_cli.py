@@ -104,6 +104,7 @@ mhc_params.add_argument('-a',
 mhc_params.add_argument('-c',
                         '--mhc_class',
                         type=str,
+                        choices=('I', 'II'),
                         help='The class of MHC allele(s) and predictors.')
 
 mhc_params.add_argument('-app',
@@ -118,16 +119,18 @@ mhc_params.add_argument('-rt',
                         nargs='+',
                         type=str,
                         choices=('AutoRT', 'DeepLC', 'Deeplc_hela_hf', 'AlphaPeptDeep_rt_generic', 'Prosit_2019_irt',
-                                 'Prosit_2024_irt_cit', 'Chronologer_RT'),
+                                 'Prosit_2024_irt_cit', 'Prosit_2020_irt_TMT', 'Chronologer_RT'),
                         help='The RT score predictors you want to be considered by the discriminant function.')
 
 mhc_params.add_argument('-ms2',
                         '--ms2_predictors',
                         nargs='+',
                         type=str,
-                        choices=('AlphaPeptDeep_ms2_generic', 'Prosit_2019_intensity', 'Prosit_2024_intensity_cit', 'Prosit_2023_intensity_timsTOF',
-                                 'Prosit_2020_intensity_CID', 'Prosit_2020_intensity_HCD',
-                                 'ms2pip_HCD2021', 'ms2pip_timsTOF2023', 'ms2pip_iTRAQphospho', 'ms2pip_Immuno_HCD', 'ms2pip_TTOF5600', 'ms2pip_timsTOF2024', 'ms2pip_CID_TMT'),
+                        choices=('AlphaPeptDeep_ms2_generic', 'Prosit_2019_intensity', 'Prosit_2024_intensity_cit',
+                                 'Prosit_2023_intensity_timsTOF', 'Prosit_2020_intensity_CID',
+                                 'Prosit_2020_intensity_HCD', 'Prosit_2020_intensity_TMT',
+                                 'ms2pip_HCD2021', 'ms2pip_timsTOF2023', 'ms2pip_iTRAQphospho', 'ms2pip_Immuno_HCD',
+                                 'ms2pip_TTOF5600', 'ms2pip_timsTOF2024', 'ms2pip_CID_TMT'),
                         help='The MS2 score predictors you want to be considered by the discriminant function.')
 
 mhc_params.add_argument('-ccs',

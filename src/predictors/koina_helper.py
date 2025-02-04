@@ -8,12 +8,12 @@ from src.predictors.base_predictor_helper import BasePredictorHelper
 from src.utils.peptide import convert_mass_diff_to_unimod
 
 # Updated in Nov 5, 2024
-KOINA_PREDICTORS = {
+koina_predictor_map = {
     'Deeplc_hela_hf': 'RT',
     'AlphaPeptDeep_rt_generic': 'RT',
     'Prosit_2019_irt': 'RT',
     'Prosit_2024_irt_cit': 'RT',
-    # 'Prosit_2020_irt_TMT': 'RT', # only TMT labeled
+    'Prosit_2020_irt_TMT': 'RT', # only TMT labeled
     'Chronologer_RT': 'RT',
 
     'IM2Deep': 'CCS',
@@ -36,9 +36,12 @@ KOINA_PREDICTORS = {
     'Prosit_2020_intensity_HCD': 'MS2',
     # 'Prosit_2024_intensity_XL_NMS2': 'MS2', # cross-linked only
     # 'Prosit_2023_intensity_XL_CMS2': 'MS2', # cross-linked only
-    # 'Prosit_2020_intensity_TMT': 'MS2', # fragmentation_types, TMT only
+    'Prosit_2020_intensity_TMT': 'MS2', # fragmentation_types, TMT only
     # 'Prosit_2023_intensity_XL_CMS3': 'MS2' # MS3
 }
+
+all_koina_predictors = list(koina_predictor_map.keys())
+general_koina_predictors = [p for p in koina_predictor_map.keys() if 'TMT' not in p]
 
 supported_mod_map = {
     'Prosit': ['C4', 'M35', 'n737', 'K737'],
@@ -78,18 +81,17 @@ class KoinaHelper(BasePredictorHelper):
         super().__init__(f'Koina', report_directory)
 
         self.predictor_map = {}
-        all_predictors = list(KOINA_PREDICTORS.keys())
         for predictor_name in predictor_names:
             match_idx = -1
-            for i, predictor in enumerate(all_predictors):
+            for i, predictor in enumerate(all_koina_predictors):
                 if predictor_name.lower() == predictor.lower():
                     match_idx = i
                     break
             if match_idx == -1:
                 print(f'Skipping.... {predictor_name} Koina predictor is not supported')
                 continue
-            predictor_name = all_predictors[match_idx]
-            predictor_type = KOINA_PREDICTORS[predictor_name]
+            predictor_name = all_koina_predictors[match_idx]
+            predictor_type = koina_predictor_map[predictor_name]
             if predictor_type not in self.predictor_map.keys():
                 self.predictor_map[predictor_type] = [predictor_name]
             else:

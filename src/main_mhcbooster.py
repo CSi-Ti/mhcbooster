@@ -23,7 +23,7 @@ from src.predictors.peptdeep_helper import PeptDeepHelper
 from src.predictors.autort_helper import AutortHelper
 from src.predictors.deeplc_helper import DeepLCHelper
 from src.predictors.im2deep_helper import IM2DeepHelper
-from src.predictors.koina_helper import KoinaHelper, KOINA_PREDICTORS
+from src.predictors.koina_helper import KoinaHelper, general_koina_predictors
 from src.predictors.auto_model_predictor import predict_best_combination
 from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 import matplotlib.pyplot as plt
@@ -548,7 +548,7 @@ class MhcValidator:
         if self.fine_tune:
             self.add_autort_predictions()
             self.add_deeplc_predictions()
-            self.koina_predictors = KOINA_PREDICTORS.keys()
+            self.koina_predictors = general_koina_predictors.copy()
             self.koina_predictors.remove('Deeplc_hela_hf')
             self.koina_predictors.remove('Chronologer_RT')
             if not use_ccs:
@@ -560,7 +560,7 @@ class MhcValidator:
             self.add_koina_predictions()
         else:
             self.add_autort_predictions()
-            self.koina_predictors = list(KOINA_PREDICTORS.keys())
+            self.koina_predictors = general_koina_predictors.copy()
             self.koina_predictors.remove('Chronologer_RT')
             if not use_ccs:
                 self.koina_predictors.remove('IM2Deep')
