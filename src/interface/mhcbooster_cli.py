@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import argparse
 
@@ -99,7 +100,11 @@ mhc_params.add_argument('-a',
                         nargs='+',
                         type=str,
                         help='MHC allele(s) of the sample of interest. If there is more than one, pass them as a space-'
-                             'separated list. Not required if you are not running MhcFlurry or NetMHCpan.')
+                             'separated list. Not required if you are not running APP predictors.')
+mhc_params.add_argument('-c',
+                        '--mhc_class',
+                        type=str,
+                        help='The class of MHC allele(s) and predictors.')
 
 mhc_params.add_argument('-app',
                         '--app_predictors',
@@ -120,9 +125,9 @@ mhc_params.add_argument('-ms2',
                         '--ms2_predictors',
                         nargs='+',
                         type=str,
-                        choices=('Prosit_2019_intensity', 'Prosit_2024_intensity_cit', 'Prosit_2023_intensity_timsTOF',
+                        choices=('AlphaPeptDeep_ms2_generic', 'Prosit_2019_intensity', 'Prosit_2024_intensity_cit', 'Prosit_2023_intensity_timsTOF',
                                  'Prosit_2020_intensity_CID', 'Prosit_2020_intensity_HCD',
-                                 'ms2pip_HCD2021', 'ms2pip_timsTOF2023', 'ms2pip_Immuno_HCD', 'ms2pip_timsTOF2024'),
+                                 'ms2pip_HCD2021', 'ms2pip_timsTOF2023', 'ms2pip_iTRAQphospho', 'ms2pip_Immuno_HCD', 'ms2pip_TTOF5600', 'ms2pip_timsTOF2024', 'ms2pip_CID_TMT'),
                         help='The MS2 score predictors you want to be considered by the discriminant function.')
 
 mhc_params.add_argument('-ccs',
@@ -141,6 +146,12 @@ mhc_params.add_argument('--koina_server_url',
 mhc_params.add_argument('--fine_tune',
                         action='store_true',
                         help='Fine-tune the models before prediction. Supported models: [AutoRT, DeepLC, IM2Deep]')
+
+mhc_params.add_argument('--auto_pred',
+                        action='store_true',
+                        help='If you cannot decide which predictors to use, try use --auto-pred. '
+                             'This function will predict the best combination of predictors. '
+                             'Predictors will be fully override by the predicted combination.')
 
 training = parser.add_argument_group('training parameters', 'Related to the training of the artificial neural network.')
 
@@ -168,43 +179,31 @@ def run():
     if len(input_files) == 1 and os.path.isdir(input_files[0]):
         input_files = Path(input_files[0]).rglob('*.pin')
 
+    alleles = []
+    allele_map = {}
+    if args.alleles is not None:
+        if len(args.alleles) == 1 and os.path.exists(args.alleles[0]):
+            for line in open(args.alleles[0]):
+                line_split = re.split(r'[\t,]', line)
+                allele_map[line_split[0].strip()] = [allele.strip() for allele in line_split[1].split(';')]
+        else:
+            alleles = args.alleles
+
     for input_file in input_files:
+        print(f'Processing: {input_file}')
+
         if args.output_dir is None:
             args.output_dir = Path(input_file).parent
 
-
-        use_netmhcpan, use_mhcflurry, use_bigmhc, use_netmhcIIpan, use_mixmhc2pred = False, False, False, False, False
-        if args.app_predictors is not None:
-            use_netmhcpan = 'NetMHCpan' in args.app_predictors
-            use_mhcflurry = 'MHCflurry' in args.app_predictors
-            use_bigmhc = 'BigMHC' in args.app_predictors
-            use_netmhcIIpan = 'NetMHCIIpan' in args.app_predictors
-            use_mixmhc2pred = 'MixMHC2pred' in args.app_predictors
-        mhc_class = 'I'
-        if use_netmhcIIpan or use_mixmhc2pred:
-            mhc_class = 'II'
-
-        use_autort, use_deeplc = False, False
-        koina_rt_predictors = []
-        if args.rt_predictors is not None:
-            use_autort = 'AutoRT' in args.rt_predictors
-            use_deeplc = 'DeepLC' in args.rt_predictors
-            koina_rt_predictors = [m for m in args.rt_predictors if m != 'AutoRT' and m != 'DeepLC']
-
-        use_im2deep = False
-        koina_ccs_predictors = []
-        if args.ccs_predictors is not None:
-            use_im2deep = 'IM2Deep' in args.ccs_predictors and args.fine_tune
-            koina_ccs_predictors = args.ccs_predictors
-        if use_im2deep:
-            koina_ccs_predictors = [m for m in koina_ccs_predictors if m != 'IM2Deep']
-
-        koina_ms2_predictors = []
-        if args.ms2_predictors is not None:
-            koina_ms2_predictors = args.ms2_predictors
+        run_alleles = alleles.copy()
+        if len(run_alleles) == 0 and len(allele_map) != 0:
+            for keyword in allele_map.keys():
+                if keyword in input_file.stem:
+                    run_alleles = allele_map[keyword]
+                    break
 
         v = MhcValidator(max_threads=args.n_processes)
-        v.set_mhc_params(alleles=args.alleles, mhc_class=mhc_class, min_pep_len=args.min_pep_len, max_pep_len=args.max_pep_len)
+        v.set_mhc_params(alleles=run_alleles, mhc_class=args.mhc_class, min_pep_len=args.min_pep_len, max_pep_len=args.max_pep_len)
         v.load_data(input_file,
                     peptide_column=args.pep_column,
                     protein_column=args.prot_column,
@@ -213,16 +212,25 @@ def run():
                     file_delimiter=args.delimiter)
 
         v.run(sequence_encoding=args.encode_peptide_sequences,
-              netmhcpan=use_netmhcpan or use_netmhcIIpan, mhcflurry=use_mhcflurry, bigmhc=use_bigmhc, mixmhc2pred=use_mixmhc2pred,
-              autort=use_autort, deeplc=use_deeplc,
-              im2deep=use_im2deep,
-              koina_predictors=koina_rt_predictors + koina_ms2_predictors + koina_ccs_predictors,
+              app_predictors=args.app_predictors,
+              rt_predictors=args.rt_predictors,
+              ms2_predictors=args.ms2_predictors,
+              ccs_predictors=args.ccs_predictors,
+              auto_predict_predictor=args.auto_pred,
               fine_tune=args.fine_tune,
               mzml_folder=args.mzml_dir,
               report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MhcValidator',
               n_splits=args.k_folds,
               visualize=False,
               verbose=args.verbose_training)
+
+        if args.auto_pred:
+            args.rt_predictors = v.rt_predictors
+            args.ms2_predictors = v.ms2_predictors
+            args.ccs_predictors = v.ccs_predictors
+            args.app_predictors = v.app_predictors
+            args.auto_pred = False
+
 
 
 if __name__ == '__main__':

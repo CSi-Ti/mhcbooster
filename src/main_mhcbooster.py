@@ -24,6 +24,7 @@ from src.predictors.autort_helper import AutortHelper
 from src.predictors.deeplc_helper import DeepLCHelper
 from src.predictors.im2deep_helper import IM2DeepHelper
 from src.predictors.koina_helper import KoinaHelper, KOINA_PREDICTORS
+from src.predictors.auto_model_predictor import predict_best_combination
 from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 import matplotlib.pyplot as plt
 from mhcflurry.encodable_sequences import EncodableSequences
@@ -370,6 +371,31 @@ class MhcValidator:
                                                                                alignment_method=padding)
         self.encoded_peptides = deepcopy(encoded_peps)
 
+    def load_psm_coordinates(self, predictor_types=['RT','MS2','CCS']):
+        if predictor_types is None or len(predictor_types) == 0:
+            return
+        if ('RT' not in predictor_types or self.exp_rts is not None) and \
+            ('MS2' not in predictor_types or self.exp_ms2 is not None) and \
+            ('CCS' not in predictor_types or self.exp_ccs is not None):
+            return
+        if predictor_types == ['RT'] and 'retentiontime' in self.raw_data:
+            self.exp_rts = self.raw_data['retentiontime'].astype(float)
+        else:
+            assert self.mzml_folder is not None, f'mzML folder must be provided for {predictor_types} scores'
+            mzml_paths = Path(self.mzml_folder).rglob('*.mzML')
+            mzml_map = {path.stem.replace('_uncalibrated', ''): str(path.expanduser().resolve()) for path in mzml_paths}
+            mzml_name = self.filepath.name.replace('_edited.pin', '').replace('.pin', '')
+            assert mzml_name in mzml_map.keys(), f'mzML file not found: {self.mzml_folder}/{mzml_name}.mzML '
+            mzml_path = mzml_map[mzml_name]
+            if '_uncalibrated.' in mzml_path:
+                self.exp_rts, self.exp_ims, self.exp_spectra = \
+                    get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
+                                                       self.raw_data['ExpMass'].astype(float), self.charges)
+            else:
+                self.exp_rts, self.exp_ims, self.exp_spectra = \
+                    get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
+                                             self.raw_data['ExpMass'].astype(float), self.charges)
+
     def add_mhcflurry_predictions(self):
         """
         Run MhcFlurry and add presentation predictions to the training feature matrix.
@@ -516,6 +542,32 @@ class MhcValidator:
                     print("Max retries reached. Operation failed.")
                     raise
 
+    def add_all_predictors(self, use_ccs=False):
+
+        # RT, MS2, CCS
+        if self.fine_tune:
+            self.add_autort_predictions()
+            self.add_deeplc_predictions()
+            self.koina_predictors = KOINA_PREDICTORS.keys()
+            self.koina_predictors.remove('Deeplc_hela_hf')
+            self.koina_predictors.remove('Chronologer_RT')
+            if not use_ccs:
+                self.koina_predictors.remove('IM2Deep')
+                self.koina_predictors.remove('AlphaPeptDeep_ccs_generic')
+            else:
+                self.add_im2deep_predictions()
+                self.koina_predictors.remove('IM2Deep')
+            self.add_koina_predictions()
+        else:
+            self.add_autort_predictions()
+            self.koina_predictors = list(KOINA_PREDICTORS.keys())
+            self.koina_predictors.remove('Chronologer_RT')
+            if not use_ccs:
+                self.koina_predictors.remove('IM2Deep')
+                self.koina_predictors.remove('AlphaPeptDeep_ccs_generic')
+            self.add_koina_predictions()
+
+
 
     def _set_seed(self, random_seed: int = None):
         if random_seed is None:
@@ -605,9 +657,6 @@ class MhcValidator:
             return_prediction_data_and_model: bool = False,
             n_splits: int = 3,
             early_stopping_patience: int = 10,
-            #q_value_subset: float = 1.0,
-            #features_for_subset: Union[List[str], str] = 'all',
-            #subset_threshold: int = 1,
             weight_by_inverse_peptide_counts: bool = False,
             visualize: bool = False,
             random_seed: int = None,
@@ -617,15 +666,11 @@ class MhcValidator:
             fit_model: bool = True,
             fig_pdf: Union[str, PathLike] = None,
             report_directory: Union[str, PathLike] = None,
-            mhcflurry: bool = False,
-            netmhcpan: bool = False,
-            bigmhc: bool = False,
-            mixmhc2pred: bool = False,
-            peptdeep: bool = False,
-            autort: bool = False,
-            deeplc: bool = False,
-            im2deep: bool = False,
-            koina_predictors: List[str] = None,
+            rt_predictors: List[str] = None,
+            ms2_predictors: List[str] = None,
+            ccs_predictors: List[str] = None,
+            app_predictors: List[str] = None,
+            auto_predict_predictor = False,
             koina_server_url: str = 'koina.wilhelmlab.org:443',
             fine_tune: bool = False,
             sequence_encoding: bool = False,
@@ -671,8 +716,8 @@ class MhcValidator:
         """
 
         self.report_directory = str(report_directory)
-        if not os.path.exists(report_directory):
-            os.makedirs(report_directory, exist_ok=True)
+        report_directory = Path(report_directory)
+        report_directory.mkdir(parents=True, exist_ok=True)
 
         if clear_session:
             K.clear_session()
@@ -681,60 +726,83 @@ class MhcValidator:
             random_seed = self.random_seed
         self._set_seed(random_seed)
 
-        predictor_types = set()
-        if autort or deeplc:
-            predictor_types.add('RT')
-        if im2deep:
-            predictor_types.add('CCS')
-        if peptdeep:
-            predictor_types.add('RT') # TODO
-            predictor_types.add('CCS')
-            predictor_types.add('MS2')
-        if koina_predictors:
-            for predictor_name in koina_predictors:
-                if predictor_name in KOINA_PREDICTORS.keys():
-                    predictor_types.add(KOINA_PREDICTORS[predictor_name])
-                    self.koina_predictors.append(predictor_name)
-        if 'RT' in predictor_types and 'retentiontime' in self.raw_data:
-            predictor_types.remove('RT')
-            self.exp_rts = self.raw_data['retentiontime'].astype(float)
-        if len(predictor_types) != 0:
-            assert mzml_folder is not None, f'mzML folder must be provided for {predictor_types} scores'
-            mzml_paths = Path(mzml_folder).rglob('*.mzML')
-            mzml_map = {path.stem.replace('_uncalibrated', ''): str(path.expanduser().resolve()) for path in mzml_paths}
-            mzml_name = self.filepath.name.replace('_edited.pin', '.pin').replace('.pin', '')
-            assert mzml_name in mzml_map.keys(), f'mzML file not found: {mzml_folder}/{mzml_name}.mzML '
-            mzml_path = mzml_map[mzml_name]
-            if '_uncalibrated.' in mzml_path:
-                self.exp_rts, self.exp_ims, self.exp_spectra = \
-                    get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
-                                                       self.raw_data['ExpMass'].astype(float), self.charges)
-            else:
-                self.exp_rts, self.exp_ims, self.exp_spectra = \
-                    get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
-                                             self.raw_data['ExpMass'].astype(float), self.charges)
+        self.mzml_folder = str(mzml_folder)
 
+        self.rt_predictors = rt_predictors
+        self.ms2_predictors = ms2_predictors
+        self.ccs_predictors = ccs_predictors
+        self.app_predictors = app_predictors
+        self.auto_predict_predictor = auto_predict_predictor
         self.fine_tune = fine_tune
         self.koina_server_url = koina_server_url
-        if netmhcpan:
-            self.add_netmhcpan_predictions()
-        if mhcflurry and self.mhc_class == 'I':
-            self.add_mhcflurry_predictions()
-        if bigmhc and self.mhc_class == 'I':
-            self.add_bigmhc_predictions()
-        if mixmhc2pred and self.mhc_class == 'II':
-            self.add_mixmhc2pred_predictions()
-        if peptdeep:
-            self.add_peptdeep_predictions()
-        if autort:
-            self.add_autort_predictions()
-        if deeplc:
-            self.add_deeplc_predictions()
-        if im2deep:
-            self.add_im2deep_predictions()
-        if len(self.koina_predictors) > 0:
-            self.add_koina_predictions()
 
+        if self.app_predictors is not None and len(self.app_predictors) > 0:
+            self.app_predictors = [p.lower() for p in self.app_predictors]
+            if 'netmhcpan' in self.app_predictors:
+                self.add_netmhcpan_predictions()
+            if 'mhcflurry' in self.app_predictors and self.mhc_class == 'I':
+                self.add_mhcflurry_predictions()
+            if 'bigmhc' in self.app_predictors and self.mhc_class == 'I':
+                self.add_bigmhc_predictions()
+            if 'mixmhc2pred' in self.app_predictors and self.mhc_class == 'II':
+                self.add_mixmhc2pred_predictions()
+
+        if self.auto_predict_predictor:
+            self.load_psm_coordinates()
+            self.add_all_predictors()
+            self.rt_predictors, self.ms2_predictors = predict_best_combination(self.feature_matrix)
+            self.ccs_predictors = ['im2deep', 'alphapeptdeep_ccs_generic']
+
+            drop_columns = []
+            for column in self.feature_matrix.columns:
+                if column.endswith('_log_rt_error'):
+                    predictor = column[:-13]
+                    if predictor not in self.rt_predictors:
+                        drop_columns.append(predictor + '_rt_error')
+                        drop_columns.append(predictor + '_log_rt_error')
+                        drop_columns.append(predictor + '_rt_rel_error')
+                        drop_columns.append(predictor + '_log_rt_rel_error')
+                if column.endswith('_entropy_score'):
+                    predictor = column[:-14]
+                    if predictor not in self.ms2_predictors:
+                        drop_columns.append(predictor + '_entropy_score')
+                        drop_columns.append(predictor + '_cosine_score')
+                        drop_columns.append(predictor + '_forward_score')
+                        drop_columns.append(predictor + '_reverse_score')
+            self.feature_matrix.drop(drop_columns, axis=1, inplace=True)
+
+        else:
+            predictor_types = []
+            if self.rt_predictors is not None and len(self.rt_predictors) > 0:
+                self.rt_predictors = [p.lower() for p in self.rt_predictors]
+                predictor_types.append('RT')
+            if self.ms2_predictors is not None and len(self.ms2_predictors) > 0:
+                predictor_types.append('MS2')
+                self.ms2_predictors = [p.lower() for p in self.ms2_predictors]
+            if self.ccs_predictors is not None and len(self.ccs_predictors) > 0:
+                predictor_types.append('CCS')
+                self.ccs_predictors = [p.lower() for p in self.ccs_predictors]
+            self.load_psm_coordinates(predictor_types=predictor_types)
+            
+            if self.rt_predictors is not None and 'autort' in self.rt_predictors:
+                self.add_autort_predictions()
+            if self.rt_predictors is not None and 'deeplc' in self.rt_predictors:
+                self.add_deeplc_predictions()
+            if self.ccs_predictors is not None and 'im2deep' in self.ccs_predictors and self.fine_tune and np.max(self.exp_ims) > 0:
+                self.add_im2deep_predictions()
+
+            self.koina_predictors = []
+            for predictor in self.rt_predictors:
+                if predictor not in ['autort', 'deeplc']:
+                    self.koina_predictors.append(predictor)
+            self.koina_predictors += self.ms2_predictors
+            if np.max(self.exp_ims) > 0:
+                for predictor in self.ccs_predictors:
+                    if predictor == 'im2deep' and self.fine_tune:
+                        continue
+                    self.koina_predictors.append(predictor)
+            if len(self.koina_predictors) > 0:
+                self.add_koina_predictions()
 
         if model.lower() == 'mhcvalidator':
             if not sequence_encoding:
@@ -801,15 +869,6 @@ class MhcValidator:
                 model.load_weights(initial_model_weights)
             feature_matrix = deepcopy(all_data)
 
-            '''if q_value_subset < 1.:
-                mask = self.get_qvalue_mask_from_features(X=feature_matrix[train_index],
-                                                          y=labels[train_index],
-                                                          cutoff=q_value_subset,
-                                                          n=subset_threshold,
-                                                          features_to_use=features_for_subset,
-                                                          verbosity=1)
-            else:
-                mask = np.ones_like(labels[train_index], dtype=bool)'''
             mask = np.ones_like(labels[train_index], dtype=bool)  # just in case we implement the q-value subset again
 
             x_train = deepcopy(feature_matrix[train_index, :][mask])
@@ -886,10 +945,7 @@ class MhcValidator:
                 if model_name != '':
                     model.load_weights(model_name)
                     if report_directory is not None:
-                        if not os.path.exists(report_directory):
-                            os.mkdir(report_directory)
-                        model.save(Path(report_directory) / f'{Path(self.filename).stem}'
-                                                            f'.mhcvalidator_model_k={k_fold+1}.keras')
+                        model.save(report_directory / f'{Path(self.filename).stem}.mhcvalidator_model_k={k_fold+1}.keras')
             else:
                 fit_history = None
 
@@ -1031,7 +1087,7 @@ class MhcValidator:
             pdf.savefig(fig)
             pdf.close()
         if report_directory is not None:
-            pdf_file = Path(report_directory) / f'{Path(self.filename).stem}.MhcValidator_training_report.pdf'
+            pdf_file = report_directory / f'{Path(self.filename).stem}.MhcValidator_training_report.pdf'
             pdf = plt_pdf.PdfPages(str(pdf_file), keep_empty=False)
             pdf.savefig(fig)
             pdf.close()
@@ -1052,19 +1108,19 @@ class MhcValidator:
         self.annotated_data = self.raw_data.copy(deep=True)
 
         if report_directory is not None:
-            self.annotated_data.to_csv(Path(report_directory) /
+            self.annotated_data.to_csv(report_directory /
                                        f'{Path(self.filename).stem}.MhcValidator_annotated.tsv',
                                        index=False, sep='\t')
             features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
             features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
-            features_all.to_csv(Path(report_directory) / f'{Path(self.filename).stem}.features.tsv',
+            features_all.to_csv(report_directory / f'{Path(self.filename).stem}.features.tsv',
                                        index=False, sep='\t')
             if self.mhcflurry_predictions is not None:
-                self.mhcflurry_predictions.to_csv(Path(report_directory) /
+                self.mhcflurry_predictions.to_csv(report_directory /
                                                   f'{Path(self.filename).stem}.MhcFlurry_Predictions.tsv',
                                                   index=False, sep='\t')
             if self.netmhcpan_predictions is not None:
-                self.netmhcpan_predictions.to_csv(Path(report_directory) /
+                self.netmhcpan_predictions.to_csv(report_directory /
                                                   f'{Path(self.filename).stem}.NetMHCpan_Predictions.tsv',
                                                   index=False, sep='\t')
 
@@ -1072,13 +1128,3 @@ class MhcValidator:
             return output, {'predictions': deepcopy(self.predictions),
                             'qs': deepcopy(self.qs),
                             'roc': deepcopy(self.roc)}
-
-
-
-    def get_peptide_list_at_fdr(self, fdr: float, label: int = 1, peptide_level: bool = False):
-        if peptide_level:
-            qs, _, labels, peps, _ = calculate_peptide_level_qs(self.predictions, self.labels,
-                                                                self.peptides)
-            return peps[(qs <= fdr) & (labels == label)]
-        else:
-            return self.peptides[(self.qs <= fdr) & (self.labels == label)]
