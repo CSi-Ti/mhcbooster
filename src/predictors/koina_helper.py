@@ -78,10 +78,17 @@ class KoinaHelper(BasePredictorHelper):
         super().__init__(f'Koina', report_directory)
 
         self.predictor_map = {}
+        all_predictors = list(KOINA_PREDICTORS.keys())
         for predictor_name in predictor_names:
-            if predictor_name not in KOINA_PREDICTORS.keys():
+            match_idx = -1
+            for i, predictor in enumerate(all_predictors):
+                if predictor_name.lower() == predictor.lower():
+                    match_idx = i
+                    break
+            if match_idx == -1:
                 print(f'Skipping.... {predictor_name} Koina predictor is not supported')
                 continue
+            predictor_name = all_predictors[match_idx]
             predictor_type = KOINA_PREDICTORS[predictor_name]
             if predictor_type not in self.predictor_map.keys():
                 self.predictor_map[predictor_type] = [predictor_name]
