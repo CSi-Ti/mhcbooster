@@ -20,6 +20,6 @@ peptdeep==1.3.0
 pydivsufsort
 mokapot==0.10.0
 im2deep
-PySide2==5.15.2.1
+PySide6
 statsmodels==0.14.4
 koinapy==0.0.9
