@@ -51,9 +51,11 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
         ms_list = ms2_list
     else:
         ms_list = ms1_list
-    exp_rts = np.zeros(len(scan_nrs))
-    exp_ims = np.zeros(len(scan_nrs))
-    exp_spectra = pd.DataFrame(columns=['mzs', 'intensities', 'ce'])
+    exp_rts = [None] * len(scan_nrs)
+    exp_ims = [None] * len(scan_nrs)
+    exp_mzs = [None] * len(scan_nrs)
+    exp_intensities = [None] * len(scan_nrs)
+    exp_ces = [None] * len(scan_nrs)
     for i, scan_nr in tqdm(enumerate(scan_nrs), total=len(scan_nrs), desc='Extracting RTs, CCSs, MS2s...'):
         spectrum = ms_list[scan_nr - 1]
         target_rt = _extract_rt(spectrum)
@@ -62,9 +64,9 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
         if precursor_mz - lower_offset < target_mzs[i] < precursor_mz + upper_offset:
             im, ce, mzs, ints = _extract_im_ms2(spectrum)
             exp_ims[i] = im
-            exp_spectra.loc[i, 'mzs'] = mzs
-            exp_spectra.loc[i, 'intensities'] = ints
-            exp_spectra.loc[i, 'ce'] = ce
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
             continue
 
         # Search neighbor for TimsTOF data
@@ -79,9 +81,9 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
                 matched = True
                 im, ce, mzs, ints = _extract_im_ms2(spectrum)
                 exp_ims[i] = im
-                exp_spectra.loc[i, 'mzs'] = mzs
-                exp_spectra.loc[i, 'intensities'] = ints
-                exp_spectra.loc[i, 'ce'] = ce
+                exp_ces[i] = ce
+                exp_mzs[i] = mzs
+                exp_intensities[i] = ints
                 break
         if matched:
             continue
@@ -95,12 +97,19 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
                 matched = True
                 im, ce, mzs, ints = _extract_im_ms2(spectrum)
                 exp_ims[i] = im
-                exp_spectra.loc[i, 'mzs'] = mzs
-                exp_spectra.loc[i, 'intensities'] = ints
-                exp_spectra.loc[i, 'ce'] = ce
+                exp_ces[i] = ce
+                exp_mzs[i] = mzs
+                exp_intensities[i] = ints
                 break
         if not matched:
             print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+
+    exp_rts = np.array(exp_rts)
+    exp_ims = np.array(exp_ims)
+    exp_spectra = pd.DataFrame()
+    exp_spectra['mzs'] = exp_mzs
+    exp_spectra['intensities'] = exp_intensities
+    exp_spectra['ce'] = exp_ces
     return exp_rts, exp_ims, exp_spectra
 
 
@@ -118,9 +127,11 @@ def get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, scan_nrs, masses, charges):
             if scan_nr_idx == len(scan_nrs):
                 break
     assert len(ms2_list) == len(scan_nrs), 'Error in MSFragger uncalibrated mzML file reading...'
-    exp_rts = np.zeros(len(scan_nrs))
-    exp_ims = np.zeros(len(scan_nrs))
-    exp_spectra = pd.DataFrame(columns=['mzs', 'intensities', 'ce'])
+    exp_rts = [None] * len(scan_nrs)
+    exp_ims = [None] * len(scan_nrs)
+    exp_mzs = [None] * len(scan_nrs)
+    exp_intensities = [None] * len(scan_nrs)
+    exp_ces = [None] * len(scan_nrs)
     for i, scan_nr in tqdm(enumerate(scan_nrs), total=len(scan_nrs), desc='Extracting RTs, CCSs, MS2s...'):
         spectrum = ms2_list[i]
         target_rt = _extract_rt(spectrum)
@@ -129,9 +140,16 @@ def get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, scan_nrs, masses, charges):
         if precursor_mz - lower_offset < target_mzs[i] < precursor_mz + upper_offset:
             im, ce, mzs, ints = _extract_im_ms2_msfragger(spectrum)
             exp_ims[i] = im
-            exp_spectra.loc[i, 'mzs'] = mzs
-            exp_spectra.loc[i, 'intensities'] = ints
-            exp_spectra.loc[i, 'ce'] = ce
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
         else:
             print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+
+    exp_rts = np.array(exp_rts)
+    exp_ims = np.array(exp_ims)
+    exp_spectra = pd.DataFrame()
+    exp_spectra['mzs'] = exp_mzs
+    exp_spectra['intensities'] = exp_intensities
+    exp_spectra['ce'] = exp_ces
     return exp_rts, exp_ims, exp_spectra
