@@ -42,6 +42,7 @@ koina_predictor_map = {
 
 all_koina_predictors = list(koina_predictor_map.keys())
 general_koina_predictors = [p for p in koina_predictor_map.keys() if 'TMT' not in p]
+general_koina_predictors.remove('AlphaPeptDeep_ms2_generic') # Bug in return length 02082025
 
 supported_mod_map = {
     'Prosit': ['C4', 'M35', 'n737', 'K737'],
