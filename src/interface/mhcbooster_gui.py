@@ -15,7 +15,9 @@ from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QVBoxLayout, QLineEdit, QFileDialog, QHBoxLayout,
                                QCheckBox, QGridLayout, QSpinBox, QGroupBox,
                                QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QSizePolicy, QRadioButton,
-                               QDoubleSpinBox)
+                               QDoubleSpinBox, QProgressBar)
+
+from src.utils.package_installer import *
 
 ROOT_PATH = Path(__file__).parent.parent.parent
 sys.path.append(ROOT_PATH.as_posix())
@@ -465,7 +467,7 @@ class MhcBoosterGUI(QWidget):
         third_party_layout.addLayout(netmhcpan_layout)
 
         # NetMHCIIpan
-        netmhcIIpan_label = QLabel('NetMHCIIpan path: \t')
+        netmhcIIpan_label = QLabel('NetMHCIIpan path:\t')
         self.netmhcIIpan_inputbox = QLineEdit()
         self.netmhcIIpan_inputbox.setPlaceholderText("Select the path to netMHCIIpan-4.3e.Linux.tar.gz ...")
         self.netmhcIIpan_browse_button = QPushButton("Browse")
@@ -480,13 +482,13 @@ class MhcBoosterGUI(QWidget):
         third_party_layout.addLayout(netmhcIIpan_layout)
 
         # MixMHC2pred
-        mixmhc2pred_label = QLabel('MixMHC2pred path: \t')
+        mixmhc2pred_label = QLabel('MixMHC2pred path:')
         self.mixmhc2pred_inputbox = QLineEdit()
-        self.mixmhc2pred_inputbox.setPlaceholderText("Select the path to MixMHC2pred-master.zip ...")
+        self.mixmhc2pred_inputbox.setPlaceholderText("Select the path to MixMHC2pred-2.0.zip ...")
         self.mixmhc2pred_browse_button = QPushButton("Browse")
         self.mixmhc2pred_browse_button.clicked.connect(self.open_file_dialog)
         self.mixmhc2pred_download_button = QPushButton("Download")
-        self.mixmhc2pred_download_button.clicked.connect(lambda: webbrowser.open('https://github.com/GfellerLab/MixMHC2pred/archive/refs/heads/master.zip'))
+        self.mixmhc2pred_download_button.clicked.connect(lambda: webbrowser.open('https://github.com/GfellerLab/MixMHC2pred/releases/download/v2.0.2.2/MixMHC2pred-2.0.zip'))
         mixmhc2pred_layout = QHBoxLayout()
         mixmhc2pred_layout.addWidget(mixmhc2pred_label)
         mixmhc2pred_layout.addWidget(self.mixmhc2pred_inputbox)
@@ -496,7 +498,15 @@ class MhcBoosterGUI(QWidget):
         
         extract_layout = QHBoxLayout()
         extract_layout.setContentsMargins(0, 10, 0, 0)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 6)  # Set range to 0 to make it indeterminate
+        self.progress_bar.setTextVisible(False)  # Hide the text inside the progress bar
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
         self.extract_button = QPushButton("Install to MHCBooster")
+        self.extract_button.clicked.connect(self.on_install_clicked)
+        self.refresh_third_party_status()
+        extract_layout.addWidget(self.progress_bar)
         extract_layout.addWidget(self.extract_button)
         extract_layout.setAlignment(Qt.AlignRight)
         third_party_layout.addLayout(extract_layout)
@@ -858,10 +868,13 @@ class MhcBoosterGUI(QWidget):
             elif sender == self.psm_output_button:
                 self.psm_output_inputbox.setText(selected_path)
                 self.result_inputbox.setText(selected_path)
+            elif sender == self.raw_button:
+                self.raw_inputbox.setText(selected_path)
             elif sender == self.raw_output_button:
                 self.raw_output_inputbox.setText(selected_path)
                 self.result_inputbox.setText(selected_path)
-            # elif sender == self.msfragger_browse_button:
+            elif sender == self.result_button:
+                self.result_inputbox.setText(selected_path)
 
     def open_file_dialog(self):
         sender = self.sender()
@@ -872,11 +885,28 @@ class MhcBoosterGUI(QWidget):
             selected_path = file_dialog.selectedFiles()[0]
             if sender == self.allele_button:
                 self.allele_inputbox.setText(selected_path)
-            elif sender == self.fasta_inputbox:
+            elif sender == self.fasta_button:
                 self.fasta_inputbox.setText(selected_path)
                 self.report_fasta_inputbox.setText(selected_path)
-            elif sender == self.report_fasta_inputbox:
+            elif sender == self.report_fasta_button:
                 self.report_fasta_inputbox.setText(selected_path)
+            elif sender == self.contam_fasta_button:
+                self.contam_fasta_inputbox.setText(selected_path)
+            elif sender == self.param_button:
+                self.param_inputbox.setText(selected_path)
+            elif sender == self.msfragger_browse_button:
+                self.msfragger_inputbox.setText(selected_path)
+            elif sender == self.autort_browse_button:
+                self.autort_inputbox.setText(selected_path)
+            elif sender == self.bigmhc_browse_button:
+                self.bigmhc_inputbox.setText(selected_path)
+            elif sender == self.netmhcpan_browse_button:
+                self.netmhcpan_inputbox.setText(selected_path)
+            elif sender == self.netmhcIIpan_browse_button:
+                self.netmhcIIpan_inputbox.setText(selected_path)
+            elif sender == self.mixmhc2pred_browse_button:
+                self.mixmhc2pred_inputbox.setText(selected_path)
+
 
     def on_mhc_I_checkbox_toggled(self, checked):
         if checked:
@@ -925,6 +955,46 @@ class MhcBoosterGUI(QWidget):
         else:
             self.worker_stop()
             self.add_log('Process terminated.')
+
+    def on_install_clicked(self):
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        if Path(self.msfragger_inputbox.text()).exists() and self.msfragger_inputbox.text().endswith('.zip'):
+            install_msfragger(self.msfragger_inputbox.text())
+        self.progress_bar.setValue(1)
+        if Path(self.autort_inputbox.text()).exists() and self.autort_inputbox.text().endswith('.zip'):
+            install_autort(self.autort_inputbox.text())
+        self.progress_bar.setValue(2)
+        if Path(self.bigmhc_inputbox.text()).exists() and self.bigmhc_inputbox.text().endswith('.zip'):
+            install_bigmhc(self.bigmhc_inputbox.text())
+        self.progress_bar.setValue(3)
+        if Path(self.netmhcpan_inputbox.text()).exists() and self.netmhcpan_inputbox.text().endswith('.gz'):
+            install_netmhcpan(self.netmhcpan_inputbox.text())
+        self.progress_bar.setValue(4)
+        if Path(self.netmhcIIpan_inputbox.text()).exists() and self.netmhcIIpan_inputbox.text().endswith('.gz'):
+            install_netmhcIIpan(self.netmhcIIpan_inputbox.text())
+        self.progress_bar.setValue(5)
+        if Path(self.mixmhc2pred_inputbox.text()).exists() and self.mixmhc2pred_inputbox.text().endswith('.zip'):
+            install_mixmhc2pred(self.mixmhc2pred_inputbox.text())
+        self.progress_bar.setValue(6)
+        self.refresh_third_party_status()
+        self.progress_bar.setVisible(False)
+
+    def refresh_third_party_status(self):
+        third_party_folder = Path(__file__).parent.parent.parent/'third_party'
+        for path in third_party_folder.iterdir():
+            if 'AutoRT' in path.name:
+                self.autort_inputbox.setText(str(path))
+            if 'bigmhc' in path.name:
+                self.bigmhc_inputbox.setText(str(path))
+            if 'MixMHC2pred' in path.name:
+                self.mixmhc2pred_inputbox.setText(str(path))
+            if 'MSFragger' in path.name:
+                self.msfragger_inputbox.setText(str(path))
+            if 'netMHCIIpan' in path.name:
+                self.netmhcIIpan_inputbox.setText(str(path))
+            if 'netMHCpan' in path.name:
+                self.netmhcpan_inputbox.setText(str(path))
 
     def worker_start(self):
         self.button_run.setText('STOP')
