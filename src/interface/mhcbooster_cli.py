@@ -5,6 +5,8 @@ import argparse
 
 from pathlib import Path
 
+from src.report.result_combiner import ResultCombiner
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src import __version__
 from src.main_mhcbooster import MhcValidator
@@ -180,7 +182,8 @@ def run():
 
     input_files = args.input
     if len(input_files) == 1 and os.path.isdir(input_files[0]):
-        input_files = Path(input_files[0]).rglob('*.pin')
+        input_files = list(Path(input_files[0]).rglob('*.pin'))
+        input_files = sorted(input_files, key=lambda f: -f.stat().st_size)
 
     alleles = []
     allele_map = {}
@@ -234,7 +237,8 @@ def run():
             args.app_predictors = v.app_predictors
             args.auto_pred = False
 
-
+    result_combiner = ResultCombiner(Path(args.output_dir))
+    result_combiner.run()
 
 if __name__ == '__main__':
     run()

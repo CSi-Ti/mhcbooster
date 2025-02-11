@@ -266,7 +266,7 @@ class MhcValidator:
         self.filename = Path(filepath).name
         self.filepath = Path(filepath).expanduser().resolve()
 
-        print('Preparaing training features')
+        print('Preparing training features')
         self.feature_matrix = prepare_features(self.raw_data, filetype=self.loaded_filetype, use_features=use_features)
 
     def load_pout_data(self,
