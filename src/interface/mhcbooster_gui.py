@@ -978,6 +978,7 @@ class MhcBoosterGUI(QWidget):
             install_mixmhc2pred(self.mixmhc2pred_inputbox.text())
         self.progress_bar.setValue(6)
         self.refresh_third_party_status()
+        time.sleep(1)
         self.progress_bar.setVisible(False)
 
     def refresh_third_party_status(self):

@@ -2,6 +2,8 @@ import os
 import re
 import time
 
+from src.report.run_reporter import RunReporter
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import pandas as pd
 import numpy as np
@@ -12,7 +14,7 @@ from tensorflow.keras import backend as K
 from typing import Union, List
 from os import PathLike
 from pathlib import Path
-from src.utils.data_loaders import load_file, load_pout_data
+from src.utils.data_loaders import load_file
 from src.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
 from src.utils.features import prepare_features
 from src.predictors.netmhcpan_helper import NetMHCpanHelper
@@ -25,11 +27,10 @@ from src.predictors.deeplc_helper import DeepLCHelper
 from src.predictors.im2deep_helper import IM2DeepHelper
 from src.predictors.koina_helper import KoinaHelper, general_koina_predictors
 from src.predictors.auto_model_predictor import predict_best_combination
-from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
-import matplotlib.pyplot as plt
+from src.utils.fdr import calculate_qs, calculate_peptide_level_qs
 from mhcflurry.encodable_sequences import EncodableSequences
 from src.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
-from src.utils.peptide import remove_previous_and_next_aa, clean_peptide_sequences, remove_charge, \
+from src.utils.peptide import remove_previous_and_next_aa, get_previous_and_next_aa, remove_charge, \
     remove_modifications
 from src.model.nd_standard_scalar import NDStandardScaler
 from copy import deepcopy
@@ -37,11 +38,8 @@ from datetime import datetime
 import tempfile
 from collections import Counter
 import tensorflow.python.util.deprecation as deprecation
-from matplotlib.gridspec import GridSpec
-import matplotlib.backends.backend_pdf as plt_pdf
 from inspect import signature
-from matplotlib.cm import get_cmap
-from src.utils.dataset import k_fold_split_s
+from src.utils.dataset import k_fold_split
 
 deprecation._PRINT_DEPRECATION_WARNINGS = False
 
@@ -58,23 +56,25 @@ class MhcValidator:
                  max_threads: int = -1):
         self.filename: Union[str, None] = None
         self.filepath: Union[Path, None] = None
+        self.decoy_tag: Union[str, None]  = None
         self.model: keras.Model = None
         self.raw_data: Union[pd.DataFrame, None] = None
         self.feature_matrix: Union[pd.DataFrame, None] = None
         self.labels: Union[List[int], None] = None
         self.peptides: Union[List[str], None] = None
         self.peptides_with_mods: Union[List[str], None] = None
+        self.prev_aas: Union[np.ndarray, None] = None
+        self.next_aas: Union[np.ndarray, None] = None
         self.charges: Union[List[int], None] = None
         self.high_prob_indices: Union[np.ndarray, None] = None
         self.exp_rts: Union[np.ndarray, None] = None
         self.exp_ims: Union[np.ndarray, None] = None
-        self.exp_spectra: Union[pd.DataFrame, None] = None
+        self.exp_ms2s: Union[pd.DataFrame, None] = None
         self.encoded_peptides = None
         self.loaded_filetype: Union[str, None] = None
         self.random_seed: int = random_seed
         self.predictions: np.array = None
         self.qs: np.array = None
-        self.roc = None
         self.percolator_qs = None
         self.obs_rts: np.array = None
         self.pred_rts: np.array = None
@@ -160,9 +160,6 @@ class MhcValidator:
                   file_delimiter: str = '\t',
                   use_features: Union[List[str], None] = None):
         """
-        Load the results of an upstream search or validation tool. PIN, pepXML, mzID, X! Tandem, Spectromine and
-        generic tabular formats are accepted. To load POUT files, use the separate 'load_pout_data' function. You can
-        load both PIN and POUT files from a single experiment using the separate 'load_percolator_data' function.
         Generic tabular files must contain a column titled 'Peptide' or 'peptide' which contains the peptide sequences.
 
         :param filepath: The path to the file you want to load. Can be absolute or relative.
@@ -206,6 +203,7 @@ class MhcValidator:
                                   protein_column=protein_column, file_sep=file_delimiter,
                                   tag_is_prefix=tag_is_prefix, min_len=self.min_len, max_len=self.max_len)
         self.labels = self.raw_data['Label'].to_numpy()
+        self.decoy_tag = decoy_tag
 
         # Peptide
         if peptide_column is not None:
@@ -224,7 +222,8 @@ class MhcValidator:
             else:
                 raise IndexError('Peptide field could not be automatically found. Please indicate the column '
                                  'containing the peptide sequences')
-        self.peptides_with_mods = remove_charge(remove_previous_and_next_aa(self.peptides_with_mods))
+        self.prev_aas, self.next_aas = get_previous_and_next_aa(self.peptides_with_mods)
+        self.peptides_with_mods = np.array(remove_charge(remove_previous_and_next_aa(self.peptides_with_mods)))
         self.peptides = np.array(remove_modifications(self.peptides_with_mods))
         self._check_peptide_lengths()
 
@@ -269,93 +268,6 @@ class MhcValidator:
         print('Preparing training features')
         self.feature_matrix = prepare_features(self.raw_data, filetype=self.loaded_filetype, use_features=use_features)
 
-    def load_pout_data(self,
-                       targets_pout: Union[str, PathLike],
-                       decoys_pout: Union[str, PathLike],
-                       use_features: Union[List[str], None] = None) -> None:
-        """
-        Load POUT files generated by Percolator. You must have created both target and decoy POUT files from Percolator.
-
-        :param targets_pout: The path to the targets POUT file.
-        :param decoys_pout: The path to the decoys POUT file.
-        :param use_features: (Optional) A list of features (i.e. columns) to load.
-        :return: None
-        """
-
-        print(f'MHC class: {self.mhc_class if self.mhc_class else "not specified"}')
-        print(f'Alleles: {self.alleles if self.alleles else "not specified"}')
-        print(f'Minimum peptide length: {self.min_len}')
-        print(f'Maximum peptide length: {self.max_len}')
-
-        print('Loading PSM file')
-        self.raw_data = load_pout_data(targets_pout, decoys_pout, self.min_len, self.max_len)
-        self.labels = self.raw_data['Label'].values
-        self.peptides = list(self.raw_data['peptide'])
-        self.peptides = np.array(clean_peptide_sequences(self.peptides))
-        self._check_peptide_lengths()
-
-        # self.raw_data.drop(columns=['Label'], inplace=True)
-        self.loaded_filetype = 'tabular'
-        self.filename = (Path(targets_pout).name, Path(decoys_pout).name)
-        self.filepath = (Path(targets_pout).expanduser().resolve(), Path(decoys_pout).expanduser().resolve())
-
-        self.feature_matrix = prepare_features(self.raw_data,
-                                               filetype=self.loaded_filetype,
-                                               use_features=use_features)
-
-    def load_percolator_data(self,
-                             pin_file: Union[str, PathLike],
-                             target_pout_file: Union[str, PathLike],
-                             decoy_pout_file: Union[str, PathLike],
-                             use_features: Union[List[str], None] = None,
-                             decoy_tag='rev_',
-                             tag_is_prefix: bool = True
-                             ) -> None:
-        """
-        Load PIN and POUT files from a single experiment.You must have created both target and decoy POUT files from
-        Percolator.
-
-        :param pin_file: Path to the PIN file.
-        :param target_pout_file: The path to the targets POUT file.
-        :param decoy_pout_file: The path to the decoys POUT file.
-        :param use_features: (Optional) A list of features (i.e. columns) to load.
-        :param decoy_tag: The decoy tag used to indicate decoys in the upstream FASTA file.
-        :param tag_is_prefix: Whether or not the decoy tag is a prefix. If False, it is assumed the tag is a suffix.
-        :return: None
-        """
-        print(f'MHC class: {self.mhc_class if self.mhc_class else "not specified"}')
-        print(f'Alleles: {self.alleles if self.alleles else "not specified"}')
-        print(f'Minimum peptide length: {self.min_len}')
-        print(f'Maximum peptide length: {self.max_len}')
-        print('Loading PSM file')
-
-        pout_data = load_pout_data(target_pout_file, decoy_pout_file, self.min_len, self.max_len)
-
-        pin_data = load_file(filename=pin_file, filetype='pin', decoy_tag=decoy_tag,
-                             protein_column='Proteins', file_sep='\t',
-                             tag_is_prefix=tag_is_prefix, min_len=self.min_len, max_len=self.max_len)
-        pout_data.drop(columns=['peptide', 'proteinIds'], inplace=True)
-        pin_data.drop(columns=['Label'], inplace=True)
-
-        self.raw_data = pin_data.join(pout_data.set_index('PSMId'), on='SpecId')
-        self.percolator_qs = self.raw_data['q-value'].to_numpy(np.float32)
-        self.raw_data.drop(columns=['q-value'], inplace=True)
-
-        self.labels = self.raw_data['Label'].to_numpy(np.float32)
-        self.peptides = list(self.raw_data['Peptide'])
-        self.peptides = np.array(clean_peptide_sequences(self.peptides))
-        self._check_peptide_lengths()
-
-        self.loaded_filetype = 'PIN_POUT'
-        self.filename = (Path(pin_file).name,
-                         Path(target_pout_file).name,
-                         Path(target_pout_file).name)
-        self.filepath = (Path(pin_file).expanduser().resolve(),
-                         Path(target_pout_file).expanduser().resolve(),
-                         Path(target_pout_file).expanduser().resolve())
-        self.feature_matrix = prepare_features(self.raw_data,
-                                               filetype='pin',  # PIN file processing works for this
-                                               use_features=use_features)
 
     def encode_peptide_sequences(self):
         """
@@ -375,8 +287,8 @@ class MhcValidator:
         if predictor_types is None or len(predictor_types) == 0:
             return
         if ('RT' not in predictor_types or self.exp_rts is not None) and \
-            ('MS2' not in predictor_types or self.exp_ms2 is not None) and \
-            ('CCS' not in predictor_types or self.exp_ccs is not None):
+            ('MS2' not in predictor_types or self.exp_ms2s is not None) and \
+            ('CCS' not in predictor_types or self.exp_ims is not None):
             return
         if predictor_types == ['RT'] and 'retentiontime' in self.raw_data:
             self.exp_rts = self.raw_data['retentiontime'].astype(float)
@@ -388,11 +300,11 @@ class MhcValidator:
             assert mzml_name in mzml_map.keys(), f'mzML file not found: {self.mzml_folder}/{mzml_name}.mzML '
             mzml_path = mzml_map[mzml_name]
             if '_uncalibrated.' in mzml_path:
-                self.exp_rts, self.exp_ims, self.exp_spectra = \
+                self.exp_rts, self.exp_ims, self.exp_ms2s = \
                     get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
                                                        self.raw_data['ExpMass'].astype(float), self.charges)
             else:
-                self.exp_rts, self.exp_ims, self.exp_spectra = \
+                self.exp_rts, self.exp_ims, self.exp_ms2s = \
                     get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
                                              self.raw_data['ExpMass'].astype(float), self.charges)
 
@@ -407,10 +319,11 @@ class MhcValidator:
 
         mhcflurry_helper = MhcFlurryHelper(self.peptides, self.alleles, self.report_directory)
         mhcflurry_helper.predict_df()
+        mhcflurry_helper.pred_df.to_csv(Path(self.report_directory) / f'app_prediction.mhcflurry.tsv', sep='\t')
+
         predictions = mhcflurry_helper.score_df()
         self.feature_matrix = self.feature_matrix.join(predictions)
         mhcflurry_helper.draw_prediction_distributions(predictions, self.labels)
-        self.mhcflurry_predictions = mhcflurry_helper.format_pred_result_for_saving()
 
 
     def add_netmhcpan_predictions(self):
@@ -427,10 +340,12 @@ class MhcValidator:
                                            mhc_class=self.mhc_class, n_threads=self.max_threads,
                                            report_directory=self.report_directory)
         netmhcpan_helper.predict_df()
+        netmhcpan_helper.pred_df.to_csv(Path(self.report_directory) /
+                                        f"app_prediction.netmhc{'ii' if self.mhc_class == 'II' else ''}pan.tsv", sep='\t')
+
         predictions = netmhcpan_helper.score_df()
         self.feature_matrix = self.feature_matrix.join(predictions)
         netmhcpan_helper.draw_prediction_distributions(predictions, self.labels)
-        self.netmhcpan_predictions = netmhcpan_helper.format_pred_result_for_saving()
 
 
     def add_bigmhc_predictions(self):
@@ -439,6 +354,7 @@ class MhcValidator:
 
         bigmhc_helper = BigMhcHelper(peptides=self.peptides, alleles=self.alleles, report_directory=self.report_directory)
         bigmhc_helper.predict_df()
+        bigmhc_helper.pred_df.to_csv(Path(self.report_directory) / 'app_prediction.bigmhc.tsv', sep='\t')
         predictions = bigmhc_helper.score_df()
         self.feature_matrix = self.feature_matrix.join(predictions)
         bigmhc_helper.draw_prediction_distributions(predictions, self.labels)
@@ -450,6 +366,7 @@ class MhcValidator:
 
         mixmhc2pred_helper = MixMhc2PredHelper(peptides=self.peptides, alleles=self.alleles, report_directory=self.report_directory)
         mixmhc2pred_helper.predict_df()
+        mixmhc2pred_helper.pred_df.to_csv(Path(self.report_directory) / f'app_prediction.mixmhc2pred.tsv', sep='\t')
         predictions = mixmhc2pred_helper.score_df()
         self.feature_matrix = self.feature_matrix.join(predictions)
         mixmhc2pred_helper.draw_prediction_distributions(predictions, self.labels)
@@ -520,7 +437,7 @@ class MhcValidator:
             try:
                 koina_helper = KoinaHelper(self.peptides, self.peptides_with_mods, self.charges,
                                            predictor_names=self.koina_predictors,
-                                           exp_rts=self.exp_rts, exp_ims=self.exp_ims, exp_spectra=self.exp_spectra,
+                                           exp_rts=self.exp_rts, exp_ims=self.exp_ims, exp_ms2s=self.exp_ms2s,
                                            high_prob_indices=self.high_prob_indices,
                                            instrument_type='QE',
                                            fragmentation_type='HCD',
@@ -649,22 +566,13 @@ class MhcValidator:
 
 
     def run(self,
-            model='MhcValidator',
-            model_fit_function='fit',
-            model_predict_function='predict',
-            post_prediction_fn=lambda x: x,
             additional_training_data=None,
-            return_prediction_data_and_model: bool = False,
             n_splits: int = 3,
             early_stopping_patience: int = 10,
             weight_by_inverse_peptide_counts: bool = False,
-            visualize: bool = False,
             random_seed: int = None,
             clear_session: bool = True,
-            alternate_labels=None,
-            initial_model_weights: str = None,
             fit_model: bool = True,
-            fig_pdf: Union[str, PathLike] = None,
             report_directory: Union[str, PathLike] = None,
             rt_predictors: List[str] = None,
             ms2_predictors: List[str] = None,
@@ -675,6 +583,7 @@ class MhcValidator:
             fine_tune: bool = False,
             sequence_encoding: bool = False,
             mzml_folder: PathLike = None,
+            fasta_path: PathLike = None,
             **kwargs):
 
         """
@@ -686,10 +595,6 @@ class MhcValidator:
          NNValidator does not add the predictions.
         network supported by MhcValidator, while SEQUENCE_ENCODING will load the neural network which also performs
         convolutional peptide sequence encoding. Default is 'BASIC'.
-        :param model_fit_function: The function which fits the model. Default is 'fit'.
-        :param model_predict_function: The function used to make predictions with the fitted model. Default is 'predict'.
-        :param post_prediction_fn: A function applied to the output of the predict function. Useful if the output is
-        multidimensional, as all downstream processes expect a probability between 0 and 1.
         :param additional_training_data: Additional data for training the model. Only used if the model
         expects two inputs. If you are using the provided neural network which encodes peptide sequences, then you must
         pass self.X_encoded_peps.
@@ -699,13 +604,8 @@ class MhcValidator:
         :param n_splits: Number of splits used for training and validation/predicting (ala k-fold cross-validation).
         :param weight_by_inverse_peptide_counts: Whether to weight training by inverse peptide counts (i.e. number of
         times a sequence is identified in the data).
-        :param visualize: Visualize the results.
         :param random_seed: Random seed used.
         :param clear_session: Clear the Tensorflow session before running.
-        :param alternate_labels: Alternate labels to use for training. Possibly useful in an iterative variation of the
-        algorithm.
-        :param initial_model_weights: A file containing model weights to load before training using the models "load"
-        function, if it has one.
         :param fit_model: Whether or not to fit the model. You would only set this to false if you were loading weights
         from an already-fitted model.
         :param fig_pdf: Filepath to save a PDF version of the training report.
@@ -727,6 +627,7 @@ class MhcValidator:
         self._set_seed(random_seed)
 
         self.mzml_folder = str(mzml_folder)
+        self.fasta_path = str(fasta_path)
 
         self.rt_predictors = rt_predictors
         self.ms2_predictors = ms2_predictors
@@ -738,7 +639,7 @@ class MhcValidator:
 
         if self.app_predictors is not None and len(self.app_predictors) > 0:
             self.app_predictors = [p.lower() for p in self.app_predictors]
-            if 'netmhcpan' in self.app_predictors:
+            if 'netmhcpan' in self.app_predictors or 'netmhciipan' in self.app_predictors:
                 self.add_netmhcpan_predictions()
             if 'mhcflurry' in self.app_predictors and self.mhc_class == 'I':
                 self.add_mhcflurry_predictions()
@@ -770,7 +671,6 @@ class MhcValidator:
                         drop_columns.append(predictor + '_forward_score')
                         drop_columns.append(predictor + '_reverse_score')
             self.feature_matrix.drop(drop_columns, axis=1, inplace=True)
-
         else:
             predictor_types = []
             if self.rt_predictors is not None and len(self.rt_predictors) > 0:
@@ -796,7 +696,7 @@ class MhcValidator:
                 if predictor not in ['autort', 'deeplc']:
                     self.koina_predictors.append(predictor)
             self.koina_predictors += self.ms2_predictors
-            if np.max(self.exp_ims) > 0:
+            if self.exp_ims is not None and np.max(self.exp_ims) > 0:
                 for predictor in self.ccs_predictors:
                     if predictor == 'im2deep' and self.fine_tune:
                         continue
@@ -804,61 +704,42 @@ class MhcValidator:
             if len(self.koina_predictors) > 0:
                 self.add_koina_predictions()
 
-        if model.lower() == 'mhcvalidator':
-            if not sequence_encoding:
-                model_args = {key: arg for key, arg in kwargs.items() if key in signature(self.get_nn_model).parameters}
-                kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
-                model = self.get_nn_model(**model_args)
-            else:
-                model_args = {key: arg for key, arg in kwargs.items() if key in
-                              signature(self.get_nn_model_with_sequence_encoding).parameters}
-                kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
-                model = self.get_nn_model_with_sequence_encoding(**model_args)
-                if self.encoded_peptides is None:
-                    self.encode_peptide_sequences()
-                additional_training_data = self.encoded_peptides
+        # Initialize training model
+        if not sequence_encoding:
+            model_args = {key: arg for key, arg in kwargs.items() if key in signature(self.get_nn_model).parameters}
+            kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
+            model = self.get_nn_model(**model_args)
+        else:
+            model_args = {key: arg for key, arg in kwargs.items() if key in
+                          signature(self.get_nn_model_with_sequence_encoding).parameters}
+            kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
+            model = self.get_nn_model_with_sequence_encoding(**model_args)
+            if self.encoded_peptides is None:
+                self.encode_peptide_sequences()
+            additional_training_data = self.encoded_peptides
 
-        if initial_model_weights is not None:
-            model.load_weights(initial_model_weights)
-
-        # check if the model is a Keras model, and if so check if number of epochs and batch size have been specified.
-        # If they haven't set them to default values of 30 and 512, respectively. Otherwise things will go poorly.
-        if isinstance(model, keras.Model):
-            if 'epochs' not in kwargs.keys():
-                print('`epochs` was not passed as a keyword argument. Setting it to default value of 30')
-                kwargs['epochs'] = 30
-            if 'batch_size' not in kwargs.keys():
-                print('`batch_size` was not passed as a keyword argument. Setting it to default value of 512')
-                kwargs['batch_size'] = 512
+        if 'epochs' not in kwargs.keys():
+            print('`epochs` was not passed as a keyword argument. Setting it to default value of 30')
+            kwargs['epochs'] = 30
+        if 'batch_size' not in kwargs.keys():
+            print('`batch_size` was not passed as a keyword argument. Setting it to default value of 512')
+            kwargs['batch_size'] = 512
 
         # prepare data for training
-        all_data = self.feature_matrix.copy(deep=True)
-
-        if alternate_labels is None:
-            labels = deepcopy(self.labels)
-        else:
-            labels = alternate_labels
-
-        all_data = all_data.values
+        all_data = self.feature_matrix.copy(deep=True).values
+        labels = deepcopy(self.labels)
         peptides = self.peptides
 
-        # we might make the splits better if our stratification takes feature q-values into account.
-        # e.g. we calculate q-values for expect value and MHC predictions, and make sure we include good examples
-        # from each allele.
-        skf = k_fold_split_s(s=self.raw_data['ExpMass'].to_numpy(dtype=float), k_folds=n_splits, random_state=random_seed)
+        skf = k_fold_split(s=self.raw_data['ExpMass'].to_numpy(dtype=float), k_folds=n_splits, random_state=random_seed)
 
         predictions = np.zeros_like(labels, dtype=float)
         k_splits = np.zeros_like(labels, dtype=int)
 
-        output = []
         history = []
 
-        if isinstance(model, keras.Model):
-            now = str(datetime.now()).replace(' ', '_').replace(':', '-')
-            initial_model_weights = str(self.model_dir / f'mhcvalidator_initial_weights_{now}.keras')
-            model.save(initial_model_weights)
-        else:
-            initial_model_weights = ''
+        now = str(datetime.now()).replace(' ', '_').replace(':', '-')
+        initial_model_weights = str(self.model_dir / f'mhcvalidator_initial_weights_{now}.keras')
+        model.save(initial_model_weights)
 
         for k_fold, (train_index, predict_index) in enumerate(skf):
             print('-----------------------------------')
@@ -910,7 +791,7 @@ class MhcValidator:
                 x_predict = (x_predict, x2_test)
                 x = (x, additional_training_data)
 
-            model_fit_parameters = eval(f'signature(model.{model_fit_function})').parameters
+            model_fit_parameters = eval(f'signature(model.fit)').parameters
             if 'validation_data' in model_fit_parameters.keys():
                 val_str = 'validation_data=(x_predict, predict_labels),'
             else:
@@ -940,191 +821,61 @@ class MhcValidator:
 
             # Train the model
             if fit_model:
-                fit_history = eval(f"model.{model_fit_function}(x_train, train_labels, "
+                fit_history = eval(f"model.fit(x_train, train_labels, "
                                    f"{val_str} {weight_str} {callbacks_str} **kwargs)")
                 if model_name != '':
                     model.load_weights(model_name)
                     if report_directory is not None:
-                        model.save(report_directory / f'{Path(self.filename).stem}.mhcvalidator_model_k={k_fold+1}.keras')
+                        model_directory = report_directory / 'model'
+                        model_directory.mkdir(parents=True, exist_ok=True)
+                        model.save(model_directory / f'mhcvalidator_model_k={k_fold+1}.keras')
             else:
                 fit_history = None
 
             if fit_history is not None and hasattr(fit_history, 'history'):
                 history.append(fit_history)
 
-            predict_preds = post_prediction_fn(eval(
-                f"model.{model_predict_function}(x_predict)")).flatten()  # all these predictions are assumed to be arrays. we flatten them because sometimes the have an extra dimension of size 1
-            train_preds = post_prediction_fn(eval(f"model.{model_predict_function}(x_train)")).flatten()
+            predict_preds = eval(f"model.predict(x_predict)").flatten()  # all these predictions are assumed to be arrays. we flatten them because sometimes the have an extra dimension of size 1
             predict_qs = calculate_qs(predict_preds.flatten(), predict_labels)
-            train_qs = calculate_qs(train_preds.flatten(), train_labels)
-            preds = post_prediction_fn(eval(f"model.{model_predict_function}(x)")).flatten()
-            qs = calculate_qs(preds.flatten(), labels)
             predictions[predict_index] = predict_preds
             k_splits[predict_index] = k_fold + 1
             assert np.all(predict_labels == self.labels[predict_index])
 
-            train_roc = calculate_roc(train_qs, train_labels, qvalue_cutoff=0.05)
-            val_roc = calculate_roc(predict_qs, predict_labels, qvalue_cutoff=0.05)
-            roc = calculate_roc(qs, labels, qvalue_cutoff=0.05)
-
-            pep_level_qs, _, pep_level_labels, peps, pep_counts = calculate_peptide_level_qs(predict_preds,
-                                                                                             predict_labels,
-                                                                                             self.peptides[predict_index])
+            pep_qvalue, _, pep_labels, _, _ = calculate_peptide_level_qs(predict_preds, predict_labels, self.peptides_with_mods[predict_index])
+            seq_qvalue, _, seq_labels, _, _ = calculate_peptide_level_qs(predict_preds, predict_labels, self.peptides[predict_index])
 
             print(f' | PSMs in this split validated at 1% FDR: {np.sum((predict_qs <= 0.01) & (predict_labels == 1))}')
-            print(f' | Peptides in this split validated at 1% FDR (peptide-level): '
-                  f'{np.sum((pep_level_qs <= 0.01) & (pep_level_labels == 1))}')
+            print(f' | Peptides in this split validated at 1% FDR: {np.sum((pep_qvalue <= 0.01) & (pep_labels == 1))}')
+            print(f' | Sequences in this split validated at 1% FDR: {np.sum((seq_qvalue <= 0.01) & (seq_labels == 1))}')
             print('-----------------------------------')
-
-            results = {'train_preds': train_preds, 'train_labels': train_labels, 'train_qs': train_qs,
-                           'train_roc': train_roc, 'predict_preds': predict_preds, 'predict_labels': predict_labels,
-                           'predict_qs': predict_qs,
-                           'predict_roc': val_roc, 'preds': preds, 'labels': labels, 'qs': qs, 'roc': roc, 'model': model,
-                       'train_index': train_index, 'predict_index': predict_index}
-            output.append(results)
 
         self.predictions = np.empty(len(labels), dtype=float)
         self.qs = np.empty(len(labels), dtype=float)
-
         self.predictions = predictions
-        self.qs = calculate_qs(predictions, labels)
-        self.roc = calculate_roc(self.qs, self.labels)
 
-        pep_level_qs, _, pep_level_labels, pep_level_peps, pep_counts = calculate_peptide_level_qs(self.predictions,
-                                                                                                   self.labels,
-                                                                                                   self.peptides)
-
+        psm_qvalue = calculate_qs(predictions, labels)
+        pep_qvalue, _, pep_labels, _, _ = calculate_peptide_level_qs(self.predictions, self.labels, self.peptides_with_mods)
+        seq_qvalue, _, seq_labels, _, _ = calculate_peptide_level_qs(self.predictions, self.labels, self.peptides)
         print('===================================')
         print('Validation results')
-        print(f' | PSMs validated at 1% FDR: {np.sum((self.qs <= 0.01) & (self.labels == 1))}')
-        print(f' | Peptides validated at 1% FDR (peptide-level): '
-              f'{np.sum((pep_level_qs <= 0.01) & (pep_level_labels == 1))}')
+        print(f' | PSMs validated at 1% FDR: {np.sum((psm_qvalue <= 0.01) & (self.labels == 1))}')
+        print(f' | Peptides validated at 1% FDR: {np.sum((pep_qvalue <= 0.01) & (pep_labels == 1))}')
+        print(f' | Sequences validated at 1% FDR: {np.sum((seq_qvalue <= 0.01) & (seq_labels == 1))}')
         print('===================================')
 
-        fig = plt.figure(constrained_layout=True, figsize=(10, 10))
-        fig.suptitle(self.filename, fontsize=16)
-        gs = GridSpec(2, 2, figure=fig)
+        features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
+        features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
+        features_all.to_csv(report_directory / 'features.tsv', index=False, sep='\t')
 
-        # train = fig.add_subplot(gs[:4, 0])
-        # val = fig.add_subplot(gs[4:8, 0])
-        final: plt.Axes = fig.add_subplot(gs[0, 0])
-
-        if len(history) > 0:  # the model returned a fit history we can use here
-            dist: plt.Axes = fig.add_subplot(gs[0, 1])
-            loss: plt.Axes = fig.add_subplot(gs[1, 1])
-            #train_split = fig.add_subplot(gs[8:10, 1])
-            #val_split = fig.add_subplot(gs[10:, 1])
-        else:
-            loss: plt.Axes = None
-            dist: plt.Axes = fig.add_subplot(gs[0, 1])
-            #train_split = fig.add_subplot(gs[6:9, 1])
-            #val_split = fig.add_subplot(gs[9:, 1])
-
-        colormap = get_cmap("tab10")
-
-        # self._visualize_splits(skf, split='train', ax=train_split)
-        # self._visualize_splits(skf, split='val', ax=val_split)
-        # train_split.set_title('K-fold splits')
-        # train_split.set_ylabel('Training')
-        # val_split.set_ylabel('Validation')
-        # val_split.set_xlabel('Scan number')
-
-        if loss:
-            min_x = []
-            min_y = []
-            for i, h in enumerate(history):
-                loss.plot(range(1, len(h.history['val_loss']) + 1),
-                          h.history['val_loss'], c=colormap(i), marker=None, label=f'split {i+1}')
-                min_y.append(np.min(h.history['val_loss']))
-                min_x.append(np.argmin(h.history['val_loss']) + 1)
-            loss.plot(min_x, min_y, ls='none', marker='x', ms='12', c='k', label='best models')
-            loss.set_title('Validation loss')
-            loss.set_xlabel('Epoch')
-            loss.set_ylabel('Loss')
-            loss.legend()
-
-        # for i, r in enumerate(output):
-        #     train.plot(*r['train_roc'], c=colormap(i), ms='3', ls='none', marker='.', label=f'split {i+1}', alpha=0.6)
-        #     val.plot(*r['predict_roc'], c=colormap(i), ms='3', ls='none', marker='.', label=f'split {i+1}', alpha=0.6)
-        final.plot(*self.roc, c=colormap(0), ms='3', ls='none', marker='.', alpha=0.6)
-        n_psms_at_1percent = np.sum((self.qs <= 0.01) & (self.labels == 1))
-        final.vlines(0.01, 0, n_psms_at_1percent, ls='--', lw=1, color='k', alpha=0.7)
-        final.hlines(n_psms_at_1percent, 0, 0.01, ls='--', lw=1, color='k', alpha=0.7)
-
-        _, bins, _ = dist.hist(self.predictions[self.labels == 1], label='Target', bins=30, alpha=0.5, color='g')
-        dist.hist(self.predictions[self.labels == 0], label='Decoy', bins=bins, alpha=0.5, zorder=100, color='r')
-
-        # train.set_xlim((0, 0.05))
-        # val.set_xlim((0, 0.05))
-        final.set_xlim((0, 0.05))
-
-        # train.set_title('Training data')
-        # train.set_xlabel('q-value')
-        # train.set_ylabel('PSMs')
-        # train.set_ylim((0, train.get_ylim()[1]))
-
-        # val.set_title('Validation data')
-        # val.set_xlabel('q-value')
-        # val.set_ylabel('PSMs')
-        # val.set_ylim((0, val.get_ylim()[1]))
-
-        final.set_title('Final q-values')
-        final.set_xlabel('q-value')
-        final.set_ylabel('PSMs')
-        final.set_ylim((0, final.get_ylim()[1]))
-
-        dist.set_title('Prediction distributions')
-        dist.set_xlabel('Target probability')
-        dist.set_ylabel('PSMs')
-
-        # train.legend(markerscale=3)
-        # val.legend(markerscale=3)
-        dist.legend()
-
-        plt.tight_layout()
-        if fig_pdf is not None:
-            pdf = plt_pdf.PdfPages(str(fig_pdf), keep_empty=False)
-            pdf.savefig(fig)
-            pdf.close()
-        if report_directory is not None:
-            pdf_file = report_directory / f'{Path(self.filename).stem}.MhcValidator_training_report.pdf'
-            pdf = plt_pdf.PdfPages(str(pdf_file), keep_empty=False)
-            pdf.savefig(fig)
-            pdf.close()
-        if visualize:
-            fig.show()
-        plt.close(fig)
-
-        # make peptide-level q-value lookup
-        pep_q_lookup = {pep: q for pep, q in zip(pep_level_peps, pep_level_qs)}
-
-        self.raw_data['mhcv_peptide'] = self.peptides
-        self.raw_data['mhcv_prob'] = self.predictions
-        self.raw_data['mhcv_label'] = self.labels
-        self.raw_data['mhcv_q-value'] = self.qs
-        self.raw_data['mhcv_pep-level_q-value'] = np.array([pep_q_lookup[p] for p in self.peptides])
-        self.raw_data['mhcv_k-fold_split'] = k_splits
-
-        self.annotated_data = self.raw_data.copy(deep=True)
-
-        if report_directory is not None:
-            self.annotated_data.to_csv(report_directory /
-                                       f'{Path(self.filename).stem}.MhcValidator_annotated.tsv',
-                                       index=False, sep='\t')
-            features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
-            features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
-            features_all.to_csv(report_directory / f'{Path(self.filename).stem}.features.tsv',
-                                       index=False, sep='\t')
-            if self.mhcflurry_predictions is not None:
-                self.mhcflurry_predictions.to_csv(report_directory /
-                                                  f'{Path(self.filename).stem}.MhcFlurry_Predictions.tsv',
-                                                  index=False, sep='\t')
-            if self.netmhcpan_predictions is not None:
-                self.netmhcpan_predictions.to_csv(report_directory /
-                                                  f'{Path(self.filename).stem}.NetMHCpan_Predictions.tsv',
-                                                  index=False, sep='\t')
-
-        if return_prediction_data_and_model:
-            return output, {'predictions': deepcopy(self.predictions),
-                            'qs': deepcopy(self.qs),
-                            'roc': deepcopy(self.roc)}
+        run_reporter = RunReporter(report_directory, Path(self.filename).stem, self.decoy_tag)
+        run_reporter.add_run_result(peptides=self.peptides_with_mods, sequences=self.peptides,
+                                    prev_aas=self.prev_aas, next_aas=self.next_aas,
+                                    labels=self.labels,
+                                    charges=self.charges, scores=self.predictions,
+                                    proteins=self.raw_data['Proteins'].str.replace('@', '', regex=False))
+        run_reporter.infer_protein(self.fasta_path)
+        run_reporter.add_app_score()
+        run_reporter.generate_psm_report()
+        run_reporter.generate_peptide_report()
+        run_reporter.generate_sequence_report()
+        run_reporter.draw_result_figure([h.history['val_loss'] for h in history])

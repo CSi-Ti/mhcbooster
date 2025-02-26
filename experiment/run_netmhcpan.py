@@ -6,13 +6,14 @@ import numpy as np
 import pandas as pd
 from pyteomics.parser import length
 
-from mhcvalidator.peptides import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
-from mhcvalidator.predictors.netmhcpan_helper import NetMHCpanHelper
+from src.utils.peptide import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
+from src.predictors.netmhcpan_helper import NetMHCpanHelper
 
 N_THREADS = os.cpu_count() // 2
 # N_THREADS = 1
 
 ALLELES = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
+ALLELES = ['HLA-A0101', 'HLA-A0202', 'HLA-B5701', 'HLA-B4403', 'HLA-C0602', 'HLA-C1602']
 # ALLELES = ['HLA-A0101', 'HLA-A2415', 'HLA-B5701', 'HLA-C0602']
 # ALLELES = ['HLA-A0301', 'HLA-A6802', 'HLA-B0702', 'HLA-B1402', 'HLA-C0702', 'HLA-C0802']
 
@@ -181,9 +182,9 @@ if __name__ == '__main__':
     # eval_ms2rescore(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/ms2rescore')
     # eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/auto')
 
-    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/percolator')
-    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/fragpipe')
-    eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/mhcbooster')
+    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/percolator')
+    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/fragpipe')
+    eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/mhcbooster')
 
     # eval_mhcvalidator(folder='./JY_1_10_25M/1205_2rt_1ccs_2ms2_kfm')
     # eval_mhcvalidator(folder='./JY_1_10_25M/netmhcpan')

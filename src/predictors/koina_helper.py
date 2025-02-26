@@ -67,7 +67,7 @@ class KoinaHelper(BasePredictorHelper):
                  report_directory: str,
                  exp_rts: np.array = None,
                  exp_ims: np.array = None,
-                 exp_spectra: pd.DataFrame = None,
+                 exp_ms2s: pd.DataFrame = None,
                  high_prob_indices: np.array = None,
                  koina_server_url: str = 'koina.wilhelmlab.org:443',
                  mz_tolerance: float = 20,
@@ -100,7 +100,7 @@ class KoinaHelper(BasePredictorHelper):
 
         self.exp_rts = exp_rts
         self.exp_ims = exp_ims
-        self.exp_spectra = exp_spectra
+        self.exp_ms2s = exp_ms2s
         self.mz_tolerance = mz_tolerance
         self.use_ppm = use_ppm
         self.instrument_type = instrument_type
@@ -128,7 +128,7 @@ class KoinaHelper(BasePredictorHelper):
     def _predict_ms2(self):
         self.peptide_df = pd.DataFrame(self.peptides, columns=['peptide_sequences'])
         self.peptide_df['precursor_charges'] = self.charges
-        self.peptide_df['collision_energies'] = self.exp_spectra['ce'].to_numpy(dtype=np.float32)
+        self.peptide_df['collision_energies'] = self.exp_ms2s['ce'].to_numpy(dtype=np.float32)
         self.peptide_df['instrument_types'] = np.array([self.instrument_type] * len(self.peptide_df))
         self.peptide_df['fragmentation_types'] = np.array([self.fragmentation_type] * len(self.peptide_df))
         self.peptide_df = self.peptide_df.reset_index(drop=False)
@@ -224,8 +224,8 @@ class KoinaHelper(BasePredictorHelper):
                     pred_ms2 = pd.DataFrame()
                     pred_ms2['mzs'] = self.pred_df[f'{predictor_name}_mzs']
                     pred_ms2['intensities'] = self.pred_df[f'{predictor_name}_intensities']
-                    predictions = self.calc_ms2_scores(self.exp_spectra, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
-                    # predictions = self.calc_ms2_scores_combine(self.exp_spectra, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
+                    predictions = self.calc_ms2_scores(self.exp_ms2s, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
+                    # predictions = self.calc_ms2_scores_combine(self.exp_ms2s, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
                     all_predictions = all_predictions.join(predictions, how='outer')
 
         return all_predictions

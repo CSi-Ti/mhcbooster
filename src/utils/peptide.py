@@ -30,6 +30,17 @@ def remove_previous_and_next_aa(peptides: Union[List[str], str, Type[np.array]])
         return peptides[0]
     return peptides
 
+def get_previous_and_next_aa(peptides: Union[List[str], str, Type[np.array]]):
+    prev_aas = np.full(len(peptides), '', dtype=str)
+    next_aas = np.full(len(peptides), '', dtype=str)
+    if isinstance(peptides, str):
+        peptides = [peptides]
+    for i in range(len(peptides)):
+        if peptides[i][1] == '.' and peptides[i][-2] == '.':
+            prev_aas[i] = peptides[i][0]
+            next_aas[i] = peptides[i][-1]
+    return prev_aas, next_aas
+
 def remove_charge(peptides: Union[List[str], str]):
     peptides = deepcopy(peptides)
     return_one = False

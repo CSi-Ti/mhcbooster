@@ -367,18 +367,7 @@ def load_file(filename: Union[str, PathLike],
               file_sep: str = '\t',
               min_len: int = 8,
               max_len: int = 15):
-    """
 
-    :param max_len:
-    :param min_len:
-    :param tag_is_prefix:
-    :param filename:
-    :param filetype:
-    :param decoy_tag:
-    :param protein_column:
-    :param file_sep:
-    :return:
-    """
     if filetype not in ['pin', 'pepxml', 'tabular', 'tandem', 'mhcv']:
         raise ValueError("filetype must be one of "
                          "{'auto', 'pin', 'pepxml', 'tabular', 'tandem', 'mhcv}")

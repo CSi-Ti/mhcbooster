@@ -15,7 +15,7 @@ class MhcFlurryHelper(BasePredictorHelper):
     def __init__(self,
                  peptides: list[str],
                  alleles: list[str],
-                 report_directory: str):
+                 report_directory: str = None):
         super().__init__('MHCflurry', report_directory)
 
         if alleles is None or len(alleles) == 0:

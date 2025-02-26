@@ -4,7 +4,7 @@ from pathlib import Path
 
 class ResultCombiner:
 
-    def __init__(self, result_folder, psm_fdr=0.01, pep_fdr=0.01, prot_fdr=0.01, remove_contaminant=False):
+    def __init__(self, result_folder, psm_fdr=0.01, pep_fdr=0.01, prot_fdr=1, remove_contaminant=False):
 
         self.result_folder = result_folder
         self.psm_fdr = psm_fdr
@@ -20,8 +20,8 @@ class ResultCombiner:
         self.combined_pep = self.combine_pep(self.pep_result_map, ignore_mod=False)
         self.combined_seq = self.combine_pep(self.seq_result_map, ignore_mod=True)
 
-        self.combined_pep.to_csv(Path(self.result_folder, 'combined_peptides.csv'))
-        self.combined_seq.to_csv(Path(self.result_folder, 'combined_sequences.csv'))
+        self.combined_pep.to_csv(Path(self.result_folder, 'combined_peptides.tsv'), sep='\t', index=False)
+        self.combined_seq.to_csv(Path(self.result_folder, 'combined_sequences.tsv'), sep='\t', index=False)
         print(f'Reports saved to {self.result_folder}')
 
 

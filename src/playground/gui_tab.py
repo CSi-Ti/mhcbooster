@@ -1,47 +1,82 @@
-from PySide2.QtWidgets import QApplication, QWidget, QTabWidget, QVBoxLayout, QPushButton, QTextEdit, QLabel, QFrame
-from PySide2.QtCore import Qt
+import sys
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QProgressBar, QPushButton
 
-app = QApplication([])
+class AnimatedProgressBar(QWidget):
+    def __init__(self):
+        super().__init__()
 
-window = QWidget()
+        self.setWindowTitle("Animated Progress Bar with Color Effect")
 
-# Create the main layout
-main_layout = QVBoxLayout(window)
+        # Create a layout
+        layout = QVBoxLayout()
 
-# Create a QTabWidget
-tab_widget = QTabWidget()
+        # Create the progress bar
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 100)  # Set the range of the progress bar
+        self.progress_bar.setValue(0)  # Start from 0
+        self.progress_bar.setTextVisible(False)  # Hide text inside the progress bar
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid gray;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
 
-# Create some content for each tab
-tab1_content = QLabel("This is content for Tab 1")
-tab2_content = QLabel("This is content for Tab 2")
+        # Button to start the progress animation
+        self.start_button = QPushButton("Start Progress", self)
+        self.start_button.clicked.connect(self.start_progress)
+        layout.addWidget(self.start_button)
 
-# Add some tabs with buttons
-tab_widget.addTab(tab1_content, "Tab 1")
-tab_widget.addTab(tab2_content, "Tab 2")
+        # Set layout for the window
+        self.setLayout(layout)
 
-# Remove the border of the tab bar (no box around tabs)
-tab_widget.setStyleSheet("""
-    QTabWidget::pane {
-        border: none;  /* Remove the tab box */
-    }
+        # Set up a timer for animation
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_progress)
 
-    /* Add a line under the tab buttons */
-    QTabBar::top {
-        border-bottom: 2px solid #aaa;  /* Line under the entire tab bar */
-    }
-""")
+        # Initial progress value
+        self.progress_value = 0
 
-# Add the QTabWidget to the layout
-main_layout.addWidget(tab_widget)
-line = QFrame()
-line.setFrameShape(QFrame.HLine)  # This creates a horizontal line
-line.setFrameShadow(QFrame.Sunken)  # Optional: gives a sunken effect to the line
-main_layout.addWidget(line)  # Add the line directly below the tab bar
-# Set the layout for the window
-window.setLayout(main_layout)
-window.setWindowTitle("Tab Bar without Box")
-window.setFixedSize(400, 300)
+    def start_progress(self):
+        # Start the timer to update the progress bar value
+        self.timer.start(50)  # 50 milliseconds interval to create smooth animation
 
-window.show()
+    def update_progress(self):
+        # Update the progress value smoothly (simulate animation)
+        self.progress_value += 1
+        if self.progress_value <= 100:
+            self.progress_bar.setValue(self.progress_value)
+            self.progress_bar.setStyleSheet(f"""
+                QProgressBar::chunk {{
+                    background-color: rgb({self.progress_value*2}, {255 - self.progress_value*2}, 100);
+                    border-radius: 3px;
+                }}
+            """)
+        else:
+            # Stop the animation when the progress reaches 100
+            self.timer.stop()
+            self.progress_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 2px solid gray;
+                    border-radius: 5px;
+                    text-align: center;
+                }
+                QProgressBar::chunk {
+                    background-color: #4CAF50;
+                    border-radius: 3px;
+                }
+            """)
+            self.start_button.setText("Animation Completed")
 
-app.exec_()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = AnimatedProgressBar()
+    window.show()
+    sys.exit(app.exec())

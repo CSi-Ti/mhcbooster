@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from pyteomics.parser import length
-from mhcvalidator.peptides import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
-from mhcvalidator.predictors.netmhcpan_helper import NetMHCpanHelper
+from src.utils.peptide import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
+from src.predictors.netmhcpan_helper import NetMHCpanHelper
 
 N_THREADS = os.cpu_count() // 2
 
@@ -57,7 +57,7 @@ class Evaluation:
         if mokapot_folder.exists():
             result_df = self.base_eval_pep(mokapot_folder, pep_file_suffix='.mokapot.peptides.txt', sep='\t', pep_col='Peptide',
                                       qvalue_col='mokapot q-value', label_col='Label', target_label=True, mod_col=None)
-            result_df.columns = ['File name', 'mokapot', 'mokapot_no_mod']
+            result_df.columns = ['File name', 'mokapot_pep', 'mokapot_seq']
             return result_df
 
     def eval_percolator(self):
@@ -72,7 +72,7 @@ class Evaluation:
                     file.write(content)
             result_df = self.base_eval_pep(percolator_folder, pep_file_suffix='_pep_target.pout.m', sep='\t', pep_col='peptide',
                                       qvalue_col='q-value', label_col=None, mod_col=None)
-            result_df.columns = ['File name', 'percolator', 'percolator_no_mod']
+            result_df.columns = ['File name', 'percolator_pep', 'percolator_seq']
             return result_df
 
     def eval_fragpipe(self):
@@ -87,7 +87,7 @@ class Evaluation:
                     file.write(content)
             result_df = self.base_eval_pep(fragpipe_folder, pep_file_suffix='_pep_target.pout.m', sep='\t', pep_col='peptide',
                                       qvalue_col='q-value', label_col=None, mod_col=None)
-            result_df.columns = ['File name', 'fragpipe', 'fragpipe_no_mod']
+            result_df.columns = ['File name', 'fragpipe_pep', 'fragpipe_seq']
             return result_df
 
     def eval_philosopher(self):
@@ -95,7 +95,7 @@ class Evaluation:
         if philosopher_folder.exists():
             result_df = self.base_eval_pep(philosopher_folder, pep_file_suffix='_peptide.tsv', sep='\t', pep_col='Peptide',
                                       qvalue_col=None, label_col=None, mod_col='Assigned Modifications')
-            result_df.columns = ['File name', 'philosopher', 'philosopher_no_mod']
+            result_df.columns = ['File name', 'philosopher_pep', 'philosopher_seq']
             return result_df
 
     def eval_ms2rescore(self):
@@ -103,7 +103,7 @@ class Evaluation:
         if ms2rescore_folder.exists():
             result_df = self.base_eval_pep(ms2rescore_folder, pep_file_suffix='_result.csv', sep=',', pep_col='peptidoform',
                                            qvalue_col='peptide_qvalue', label_col='is_decoy', target_label=False, mod_col=None)
-            result_df.columns = ['File name', 'ms2rescore', 'ms2rescore_no_mod']
+            result_df.columns = ['File name', 'ms2rescore_pep', 'ms2rescore_seq']
             return result_df
 
     def eval_mhcbooster(self):
@@ -111,7 +111,7 @@ class Evaluation:
         if mhcbooster_folder.exists():
             result_df = self.base_eval_pep(mhcbooster_folder, pep_file_suffix='.MhcValidator_annotated.tsv', sep='\t', pep_col='Peptide',
                                       qvalue_col='mhcv_pep-level_q-value', label_col='mhcv_label', target_label=1, mod_col=None)
-            result_df.columns = ['File name', 'mhcbooster', 'mhcbooster_no_mod']
+            result_df.columns = ['File name', 'mhcbooster_pep', 'mhcbooster_seq']
             return result_df
 
     def run(self):
@@ -132,7 +132,11 @@ class Evaluation:
 
 if __name__ == '__main__':
 
-    evaluation = Evaluation('JPST002044', min_len=8, max_len=15)
+    evaluation = Evaluation('JY_500M', min_len=8, max_len=15)
+    evaluation.run()
+    evaluation = Evaluation('JY_Fractionation_Replicate_1', min_len=8, max_len=15)
+    evaluation.run()
+    evaluation = Evaluation('RA_Fractionation_Replicate_1', min_len=8, max_len=15)
     evaluation.run()
 
     MIN_LENGTH = 9

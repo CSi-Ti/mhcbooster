@@ -16,7 +16,7 @@ class MixMhc2PredHelper(BasePredictorHelper):
     def __init__(self,
                  peptides: list[str],
                  alleles: list[str],
-                 report_directory: str):
+                 report_directory: str = None):
         super().__init__('MixMHC2pred', report_directory)
 
         if alleles is None or len(alleles) == 0:

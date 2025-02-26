@@ -1,4 +1,4 @@
-
+import re
 import tempfile
 import subprocess
 import time
@@ -20,7 +20,7 @@ class BigMhcHelper(BasePredictorHelper):
     def __init__(self,
                  peptides: list[str],
                  alleles: list[str],
-                 report_directory: str):
+                 report_directory: str = None):
         super().__init__('BigMHC', report_directory)
 
         self.bigmhc_url = 'https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip'
@@ -76,7 +76,7 @@ class BigMhcHelper(BasePredictorHelper):
                     print(f'ERROR: Allele {allele} not supported.')
         return std_alleles
 
-    def predict_df(self):
+    def predict_df(self, im=False, cpu=True):
         print('Running BigMHC...')
         with tempfile.NamedTemporaryFile('w', delete=False) as pep_file:
             pep_file.write('mhc,pep\n')
@@ -87,7 +87,12 @@ class BigMhcHelper(BasePredictorHelper):
         with tempfile.NamedTemporaryFile('w') as results:
             results_file_path = results.name
 
-        command = f'python {self.bigmhc_exe_path} -i {pep_file_path} -o {results_file_path} -m el -d cpu'
+        device = 'cpu' if cpu else 'gpu'
+        if not im:
+            command = f'python {self.bigmhc_exe_path} -i {pep_file_path} -o {results_file_path} -m el -d {device}'
+        else:
+            command = f'python {self.bigmhc_exe_path} -i {pep_file_path} -o {results_file_path} -m im -d {device}'
+
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
         for line in iter(process.stdout.readline, ''):
             print(line.strip())
@@ -113,6 +118,7 @@ class BigMhcHelper(BasePredictorHelper):
         for allele in alleles:
             df = self.pred_df.loc[self.pred_df['mhc'] == allele, :]
             assert list(df['pep']) == list(self.peptides)
-            predictions[f'{allele}_BigMHC_ELScore'] = df['BigMHC_EL'].clip(lower=EPSILON).to_numpy()
-            predictions[f'{allele}_logBigMHC_ELScore'] = np.log(df['BigMHC_EL'].clip(lower=EPSILON)).to_numpy()
+            formatted_allele = re.sub(r'[^a-zA-Z0-9-_]', '', allele)
+            predictions[f'{formatted_allele}_BigMHC_ELScore'] = df['BigMHC_EL'].clip(lower=EPSILON).to_numpy()
+            predictions[f'{formatted_allele}_logBigMHC_ELScore'] = np.log(df['BigMHC_EL'].clip(lower=EPSILON)).to_numpy()
         return predictions

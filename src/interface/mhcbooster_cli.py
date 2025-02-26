@@ -227,7 +227,6 @@ def run():
               mzml_folder=args.mzml_dir,
               report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MhcValidator',
               n_splits=args.k_folds,
-              visualize=False,
               verbose=args.verbose_training)
 
         if args.auto_pred:

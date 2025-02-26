@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 from os import system
 
-pin_files = Path('/mnt/d/workspace/mhc-validator-2/data/PXD007635/HLA-II/').rglob('*.pin')
-output_folder = Path('/mnt/d/workspace/mhc-validator-2/experiment/PXD007635/HLA-II/percolator/')
+pin_files = Path('/mnt/d/data/JY_500M/fragpipe/Search_0204').rglob('*.pin')
+output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_500M/percolator/')
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
