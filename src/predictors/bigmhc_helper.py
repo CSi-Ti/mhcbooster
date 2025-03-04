@@ -76,7 +76,7 @@ class BigMhcHelper(BasePredictorHelper):
                     print(f'ERROR: Allele {allele} not supported.')
         return std_alleles
 
-    def predict_df(self, im=False, cpu=True):
+    def predict_df(self, im=False, gpu=False):
         print('Running BigMHC...')
         with tempfile.NamedTemporaryFile('w', delete=False) as pep_file:
             pep_file.write('mhc,pep\n')
@@ -87,7 +87,7 @@ class BigMhcHelper(BasePredictorHelper):
         with tempfile.NamedTemporaryFile('w') as results:
             results_file_path = results.name
 
-        device = 'cpu' if cpu else 'gpu'
+        device = 'all' if gpu else 'cpu'
         if not im:
             command = f'python {self.bigmhc_exe_path} -i {pep_file_path} -o {results_file_path} -m el -d {device}'
         else:
