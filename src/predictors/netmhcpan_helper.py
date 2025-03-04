@@ -154,7 +154,7 @@ class NetMHCpanHelper(BasePredictorHelper):
         return job
 
     def _run_jobs(self):
-        self.jobs = process_map(self._run_job, self.jobs, max_workers=self.n_threads)
+        self.jobs = process_map(self._run_job, self.jobs, max_workers=self.n_threads, chunksize=1)
         for job in self.jobs:
             if job.returncode != 0:
                 raise ChildProcessError(f'{job.stdout.decode()}\n\n{job.stderr.decode()}')
