@@ -49,7 +49,7 @@ deprecation._PRINT_DEPRECATION_WARNINGS = False
 DEFAULT_TEMP_MODEL_DIR = str(Path(tempfile.gettempdir()) / 'validator_models')
 
 
-class MhcValidator:
+class MHCBooster:
     def __init__(self,
                  random_seed: int = 0,
                  model_dir: Union[str, PathLike] = DEFAULT_TEMP_MODEL_DIR,
@@ -333,7 +333,7 @@ class MhcValidator:
         :return: None
         """
         if self.alleles is None or self.mhc_class is None:
-            raise RuntimeError('You must first set the MHC parameters using mhcvalidator.set_mhc_params')
+            raise RuntimeError('You must first set the MHC parameters using set_mhc_params')
 
         print(f'Running NetMHC{"II" if self.mhc_class == "II" else ""}pan')
         netmhcpan_helper = NetMHCpanHelper(peptides=self.peptides, alleles=self.alleles,
@@ -350,7 +350,7 @@ class MhcValidator:
 
     def add_bigmhc_predictions(self):
         if self.alleles is None or self.mhc_class is None:
-            raise RuntimeError('You must first set the MHC parameters using mhcvalidator.set_mhc_params')
+            raise RuntimeError('You must first set the MHC parameters using set_mhc_params')
 
         bigmhc_helper = BigMhcHelper(peptides=self.peptides, alleles=self.alleles, report_directory=self.report_directory)
         bigmhc_helper.predict_df()
@@ -362,7 +362,7 @@ class MhcValidator:
 
     def add_mixmhc2pred_predictions(self):
         if self.alleles is None:
-            raise RuntimeError('You must first set the MHC parameters using mhcvalidator.set_mhc_params')
+            raise RuntimeError('You must first set the MHC parameters using set_mhc_params')
 
         mixmhc2pred_helper = MixMhc2PredHelper(peptides=self.peptides, alleles=self.alleles, report_directory=self.report_directory)
         mixmhc2pred_helper.predict_df()
@@ -583,37 +583,12 @@ class MhcValidator:
             fine_tune: bool = False,
             sequence_encoding: bool = False,
             mzml_folder: PathLike = None,
-            fasta_path: PathLike = None,
+            psm_fdr: float = 1,
+            pep_fdr: float = 1,
+            seq_fdr: float = 1,
+            remove_decoy: bool = False,
             **kwargs):
 
-        """
-        Run the validation algorithm.
-
-        :param model: The model to train on the target/decoy data. Can be a Python object with a fit and predict
-        function, or string in {'NNValidator', 'MhcValidator'}. 'MhcValidator' causes predictions by MhcFlurry and
-         NetMHCpan to be added to the feature matrix (if the respective arguments to `run` are set to True).
-         NNValidator does not add the predictions.
-        network supported by MhcValidator, while SEQUENCE_ENCODING will load the neural network which also performs
-        convolutional peptide sequence encoding. Default is 'BASIC'.
-        :param additional_training_data: Additional data for training the model. Only used if the model
-        expects two inputs. If you are using the provided neural network which encodes peptide sequences, then you must
-        pass self.X_encoded_peps.
-        :param return_prediction_data_and_model: Whether to return predictions, q-values, etc in a dictionary. This
-        data is available from the attributes of this MhcValidator instance after running, but it can be useful to
-        return the data if you will be manipulating it downstream.
-        :param n_splits: Number of splits used for training and validation/predicting (ala k-fold cross-validation).
-        :param weight_by_inverse_peptide_counts: Whether to weight training by inverse peptide counts (i.e. number of
-        times a sequence is identified in the data).
-        :param random_seed: Random seed used.
-        :param clear_session: Clear the Tensorflow session before running.
-        :param fit_model: Whether or not to fit the model. You would only set this to false if you were loading weights
-        from an already-fitted model.
-        :param fig_pdf: Filepath to save a PDF version of the training report.
-        :param report_directory: Save all run information to a specified location. Includes: annotated input data,
-        feature matrix, NetMHCpan and MHCFlurry predictions (if applicable), model weights, training report PDF.
-        :param kwargs: Additional keyword arguments passed to model fit function.
-        :return:
-        """
 
         self.report_directory = str(report_directory)
         report_directory = Path(report_directory)
@@ -627,7 +602,6 @@ class MhcValidator:
         self._set_seed(random_seed)
 
         self.mzml_folder = str(mzml_folder)
-        self.fasta_path = str(fasta_path)
 
         self.rt_predictors = rt_predictors
         self.ms2_predictors = ms2_predictors
@@ -873,9 +847,9 @@ class MhcValidator:
                                     labels=self.labels,
                                     charges=self.charges, scores=self.predictions,
                                     proteins=self.raw_data['Proteins'].str.replace('@', '', regex=False))
-        run_reporter.infer_protein(self.fasta_path)
         run_reporter.add_app_score()
-        run_reporter.generate_psm_report()
-        run_reporter.generate_peptide_report()
-        run_reporter.generate_sequence_report()
+        run_reporter.generate_psm_report(psm_fdr=psm_fdr, remove_decoy=remove_decoy)
+        run_reporter.generate_peptide_report(pep_fdr=pep_fdr, remove_decoy=remove_decoy)
+        run_reporter.generate_sequence_report(seq_fdr=seq_fdr, remove_decoy=remove_decoy)
         run_reporter.draw_result_figure([h.history['val_loss'] for h in history])
+

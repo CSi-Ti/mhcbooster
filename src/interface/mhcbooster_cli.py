@@ -5,18 +5,18 @@ import argparse
 
 from pathlib import Path
 
-from src.report.result_combiner import ResultCombiner
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src import __version__
-from src.main_mhcbooster import MhcValidator
+from src.main_mhcbooster import MHCBooster
+from src.report.combined_reporter import CombinedReporter
 
 
 description = f"""
-MhcValidator v{__version__} (https://github.com/CaronLab/???)
+MHCBooster v{__version__} (https://github.com/CaronLab/???)
 Copyright 2024 Ruimin Wang under GNU General Public License v3.0
 
-MhcValidator is a tool for validating peptide-spectrum matches from mass spectrometry database searches. It is 
+MHCBooster is a tool for validating peptide-spectrum matches from mass spectrometry database searches. It is 
 intended for use with data from immunopeptidomics experiments, though it can be use for most types of 
 proteomics experiments as well.
 """
@@ -29,14 +29,19 @@ general.add_argument('-i',
                      required=True,
                      nargs='+',
                      type=str,
-                     help='Input file(s) for MhcValidator. Must be comma- or tab-separated files or pepXML. Note that '
-                          'MhcValidator has only been thoroughly tested using PIN files as input '
+                     help='Input file(s) for MHCBooster. Must be comma- or tab-separated files or pepXML. Note that '
+                          'MHCBooster has only been thoroughly tested using PIN files as input '
                           '(Percolator input files). You can pass multiple files as a space-separated list. If you '
                           'pass a generic tabular file, it must contain a column titled "Peptide" or "peptide" which '
                           'contains the peptide sequences. For generic tabular files, you should also use the '
                           '--prot_column, --decoy_tag, --tag_is_prefix arguments so '
-                          'MhcValidator can figure out which PSMs are targets and which are decoys.')
+                          'MHCBooster can figure out which PSMs are targets and which are decoys.')
 
+general.add_argument('-f',
+                     '--fasta_path',
+                     type=str,
+                     help='Directory for the fasta files. The fasta file should contains decoy proteins'
+                          ' and will be used for protein inference.')
 general.add_argument('-m',
                      '--mzml_dir',
                      type=str,
@@ -47,7 +52,7 @@ general.add_argument('-m',
 general.add_argument('-o',
                      '--output_dir',
                      type=str,
-                     help='Output directory for MhcValidator. If not indicated, the input directory will be used.')
+                     help='Output directory for MHCBooster. If not indicated, the input directory will be used.')
 
 general.add_argument('--pep_column',
                      type=str,
@@ -60,18 +65,19 @@ general.add_argument('--prot_column',
                           'for inferring which PSMs are targets and which are decoys. Generally not required unless '
                           'the input is a generic text file (e.g. a CSV export from a search engine).')
 
-general.add_argument('--decoy_tag',
+general.add_argument('--decoy_prefix',
                      type=str,
+                     default='rev_',
                      help='The tag indicating decoy hits in the protein column, e.g. rev_ or decoy_ are common. Used '
                           'for inferring which PSMs are targets and which are decoys. Usually not required for '
                           'PIN files.')
 
-general.add_argument('--tag_is_prefix',
-                     type=bool,
-                     default=True,
-                     help='Whether the decoy tag is a prefix or not. If not, it is assumed to be a suffix. Used '
-                          'for inferring which PSMs are targets and which are decoys. Usually not required for '
-                          'PIN files.')
+# general.add_argument('--tag_is_prefix',
+#                      type=bool,
+#                      default=True,
+#                      help='Whether the decoy tag is a prefix or not. If not, it is assumed to be a suffix. Used '
+#                           'for inferring which PSMs are targets and which are decoys. Usually not required for '
+#                           'PIN files.')
 
 general.add_argument('--delimiter',
                      type=str,
@@ -177,12 +183,50 @@ training.add_argument('-s',
                       action='store_true',
                       help='Encode peptide sequences as features for the training algorithm.')
 
+reporter = parser.add_argument_group('report parameters', 'Related to the formats of result outputs')
+
+reporter.add_argument('--infer_protein',
+                      action='store_true',
+                      help='Infer protein with ProteinProphet (Philosopher). '
+                           'The fasta file used in database search must be provided to perform inference.')
+
+reporter.add_argument('--remove_contaminant',
+                      action='store_true',
+                      help='Remove contaminants from psm, peptide and sequence results.')
+
+reporter.add_argument('--remove_decoy',
+                      action='store_true',
+                      help='Remove decoys from psm, peptide and sequence results.')
+
+reporter.add_argument('--psm_fdr',
+                      type=float,
+                      default=1,
+                      help='The PSM-level FDR threshold for result filtering. PSMs with higher FDR values '
+                           'will be filtered out in the result of each run and the combined result.')
+
+reporter.add_argument('--pep_fdr',
+                      type=float,
+                      default=1,
+                      help='The peptide-level (with modifications) FDR threshold for result filtering. '
+                           'Peptides with higher FDR values '
+                           'will be filtered out in the result of each run and the combined result.')
+
+reporter.add_argument('--seq_fdr',
+                      type=float,
+                      default=1,
+                      help='The sequence-level (without modifications) FDR threshold for result filtering. '
+                           'Sequences with higher FDR values '
+                           'will be filtered out in the result of each run and the combined result.')
+
 def run():
     args = parser.parse_args()
 
     input_files = args.input
     if len(input_files) == 1 and os.path.isdir(input_files[0]):
         input_files = list(Path(input_files[0]).rglob('*.pin'))
+        edited_input_files = list(Path(input_files[0]).rglob('*_edited.pin'))
+        if len(edited_input_files) != len(input_files):
+            input_files = [f for f in input_files if not f.stem.endswith('_edited')]
         input_files = sorted(input_files, key=lambda f: -f.stat().st_size)
 
     alleles = []
@@ -197,6 +241,8 @@ def run():
 
     for input_file in input_files:
         print(f'Processing: {input_file}')
+        if input_file.stem == 'JY_500M_ClassI_F1_DDA_25cm_R3_Slot1-3_1_614':
+            continue
 
         if args.output_dir is None:
             args.output_dir = Path(input_file).parent
@@ -208,16 +254,16 @@ def run():
                     run_alleles = allele_map[keyword]
                     break
 
-        v = MhcValidator(max_threads=args.n_processes)
-        v.set_mhc_params(alleles=run_alleles, mhc_class=args.mhc_class, min_pep_len=args.min_pep_len, max_pep_len=args.max_pep_len)
-        v.load_data(input_file,
+        mhcb = MHCBooster(max_threads=args.n_processes)
+        mhcb.set_mhc_params(alleles=run_alleles, mhc_class=args.mhc_class, min_pep_len=args.min_pep_len, max_pep_len=args.max_pep_len)
+        mhcb.load_data(input_file,
                     peptide_column=args.pep_column,
                     protein_column=args.prot_column,
-                    decoy_tag=args.decoy_tag,
-                    tag_is_prefix=args.tag_is_prefix,
+                    decoy_tag=args.decoy_prefix,
+                    tag_is_prefix=True,
                     file_delimiter=args.delimiter)
 
-        v.run(sequence_encoding=args.encode_peptide_sequences,
+        mhcb.run(sequence_encoding=args.encode_peptide_sequences,
               app_predictors=args.app_predictors,
               rt_predictors=args.rt_predictors,
               ms2_predictors=args.ms2_predictors,
@@ -225,19 +271,27 @@ def run():
               auto_predict_predictor=args.auto_pred,
               fine_tune=args.fine_tune,
               mzml_folder=args.mzml_dir,
-              report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MhcValidator',
+              report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MHCBooster',
               n_splits=args.k_folds,
-              verbose=args.verbose_training)
+              verbose=args.verbose_training,
+              psm_fdr=args.psm_fdr,
+              pep_fdr=args.pep_fdr,
+              seq_fdr=args.seq_fdr,
+              remove_decoy=args.remove_decoy)
 
         if args.auto_pred:
-            args.rt_predictors = v.rt_predictors
-            args.ms2_predictors = v.ms2_predictors
-            args.ccs_predictors = v.ccs_predictors
-            args.app_predictors = v.app_predictors
+            args.rt_predictors = mhcb.rt_predictors
+            args.ms2_predictors = mhcb.ms2_predictors
+            args.ccs_predictors = mhcb.ccs_predictors
+            args.app_predictors = mhcb.app_predictors
             args.auto_pred = False
 
-    result_combiner = ResultCombiner(Path(args.output_dir))
-    result_combiner.run()
+    combined_reporter = CombinedReporter(result_folder=args.output_dir, fasta_path=args.fasta_path,
+                                         pep_fdr=args.pep_fdr, seq_fdr=args.seq_fdr,
+                                         infer_protein=args.infer_protein,
+                                         decoy_prefix=args.decoy_prefix,
+                                         remove_contaminant=args.remove_contaminant)
+    combined_reporter.run()
 
 if __name__ == '__main__':
     run()
