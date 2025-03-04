@@ -4,12 +4,11 @@ from pathlib import Path
 
 class ResultCombiner:
 
-    def __init__(self, result_folder, psm_fdr=0.01, pep_fdr=0.01, prot_fdr=1, remove_contaminant=False):
+    def __init__(self, result_folder, psm_fdr=0.01, pep_fdr=0.01, remove_contaminant=False):
 
         self.result_folder = result_folder
         self.psm_fdr = psm_fdr
         self.pep_fdr = pep_fdr
-        self.prot_fdr = prot_fdr
         self.decoy_prefix = 'rev_'
 
     def run(self):

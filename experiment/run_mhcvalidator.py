@@ -2,12 +2,13 @@
 import os
 from pathlib import Path
 from src.main_mhcbooster import MhcValidator
+from src.report.combined_reporter import CombinedReporter
 
 alleles = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
 # alleles = ['DQB1*04', 'DQB1*06', 'DRB1*08', 'DRB1*13']
 pin_files = Path('/mnt/d/data/JY_1_10_25M/fragpipe/Search_0226').rglob('*.pin')
 mzml_folder = Path('/mnt/d/data/JY_1_10_25M/raw')
-output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226')
+output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_combined')
 
 # alleles = ['HLA-A0220', 'HLA-A6801', 'HLA-B3503', 'HLA-B3901', 'HLA-C0401', 'HLA-C0702']
 # # alleles = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
@@ -39,12 +40,14 @@ ms2_top2_tims_models = ['ms2pip_timsTOF2024', 'Prosit_2023_intensity_timsTOF']
 ms2_top2_hcd_models = ['ms2pip_HCD2021', 'Prosit_2020_intensity_HCD']
 
 auto_predict_predictor = False
+fasta_path = '/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas'
 rt_predictors = ['Prosit_2019_irt', 'Prosit_2024_irt_cit']
 ms2_predictors = ['ms2pip_timsTOF2024', 'Prosit_2023_intensity_timsTOF']
 ccs_predictors = ['AlphaPeptDeep_ccs_generic', 'IM2Deep']
-app_predictors = ['mhcflurry', 'netmhcpan', 'bigmhc']
+# app_predictors = ['mhcflurry', 'netmhcpan', 'bigmhc']
 # app_predictors = ['netmhciipan', 'mixmhc2pred']
-# app_predictors = []
+app_predictors = ['mhcflurry', 'netmhcpan']
+
 for pin in pin_files:
     file_name = pin.stem
     if 'edited' in file_name:
@@ -62,7 +65,6 @@ for pin in pin_files:
                   fine_tune=False,
                   n_splits=5,
                   mzml_folder=mzml_folder,
-                  fasta_path='/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas',
                   report_directory=output_folder / f'{file_name}')
 
     if auto_predict_predictor:
@@ -71,3 +73,5 @@ for pin in pin_files:
         ccs_predictors = validator.ccs_predictors
         auto_predict_predictor = False
 
+combined_reporter = CombinedReporter(result_folder=output_folder, fasta_path=fasta_path)
+combined_reporter.run()

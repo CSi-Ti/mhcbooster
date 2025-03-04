@@ -1,16 +1,12 @@
-import subprocess
 
 import numpy as np
 import pandas as pd
 import matplotlib.backends.backend_pdf as plt_pdf
 
 from pathlib import Path
-from copy import deepcopy
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.cm import get_cmap
-from pyteomics.mass import calculate_mass
-from pyteomics import protxml, fasta
 from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 from mhcnames import normalize_allele_name
 
@@ -52,182 +48,6 @@ class RunReporter:
         self.psm_df['protein_description'] = ''
         self.psm_df['mapped_protein'] = ''
         self.psm_df['mapped_gene'] = ''
-
-
-    def infer_protein(self, fasta_path, score_threshold=0):
-        if fasta_path is None:
-            return
-        psm_df = self.psm_df[self.psm_df['score'] >= score_threshold]
-        fasta_map = {}
-        for protein in fasta.read(fasta_path):
-            description = protein.description.strip()
-            protein_name = description.split(' ')[0]
-            protein_description = description[len(protein_name) + 1:]
-            fasta_map[protein_name] = protein_description
-
-        header = ['<?xml version="1.0" encoding="UTF-8"?>\n',
-                  '<?xml-stylesheet type="text/xsl" href="pepXML_std.xsl"?>\n',
-                  '<msms_pipeline_analysis xmlns="http://regis-web.systemsbiology.net/pepXML" xsi:schemaLocation="http://sashimi.sourceforge.net/schema_revision/pepXML/pepXML_v122.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n',
-                  '<analysis_summary analysis="MHCBooster">\n',
-                  '</analysis_summary>\n',
-                  '<msms_run_summary>\n']
-
-        with open(self.report_directory / 'peptide.pep.xml', 'w') as pepxml:
-            pepxml.writelines(header)
-
-            # fasta
-            pepxml.write('<search_summary>\n')
-            pepxml.write(f'<search_database local_path="{fasta_path}" type="AA"/>\n')
-            pepxml.write(f'</search_summary>\n')
-
-            for i, psm in psm_df.iterrows():
-                sequence = psm['sequence']
-                charge = psm['charge']
-                proteins = [protein for protein in psm['protein'].split(';') if len(protein.strip()) > 0]
-                score = psm['score']
-                # score = 1 - psm['psm_qvalue']
-
-                pepxml.write(f'<spectrum_query assumed_charge="{charge}" spectrum="{i}">\n')
-                pepxml.write('<search_result>\n')
-                pepxml.write(f'<search_hit peptide="{sequence}" calc_neutral_pep_mass="{calculate_mass(sequence)}" num_tot_proteins="{len(proteins)}" protein="{proteins[0]}">\n')
-                for i in range(1, len(proteins)):
-                    pepxml.write(f'<alternative_protein protein="{proteins[i]}"/>\n')
-                pepxml.write('<analysis_result analysis="peptideprophet">\n')
-                pepxml.write(f'<peptideprophet_result probability="{score}" all_ntt_prob="({score},{score},{score})">\n')
-                pepxml.write('</peptideprophet_result>\n')
-                pepxml.write('</analysis_result>\n')
-                pepxml.write('</search_hit>\n')
-                pepxml.write('</search_result>\n')
-                pepxml.write('</spectrum_query>\n')
-
-            pepxml.write('</msms_run_summary>\n')
-            pepxml.write('</msms_pipeline_analysis>\n')
-
-        philosopher_exe_path = Path(__file__).parent.parent.parent / 'third_party' / 'philosopher_v5.1.0_linux_amd64' / 'philosopher'
-        subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=self.report_directory, shell=True)
-        subprocess.run(f'{philosopher_exe_path} proteinprophet --maxppmdiff 2000000 peptide.pep.xml', cwd=self.report_directory, shell=True)
-
-        prot_data = list(protxml.read(str(self.report_directory / 'interact.prot.xml')))
-        seq_prot_map = {}
-        for prot in prot_data:
-            protein = prot['protein'][0]
-            prot_desc_split = [t for t in protein['protein_description'].split(' ') if t.startswith('GN=')]
-            gene_name = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0].replace('GN=', '')
-
-            protein_list = [{
-                'protein_name': protein['protein_name'],
-                'protein_description': protein['protein_description'],
-                'gene_name': self.decoy_prefix + gene_name if protein['protein_name'].startswith(self.decoy_prefix) else gene_name,
-                'n_related_peptides': len(protein['peptide'])
-            }]
-            if protein['n_indistinguishable_proteins'] > 1:
-                for dup_prot in protein['indistinguishable_protein']:
-                    prot_desc_split = [t for t in dup_prot['protein_description'].split(' ') if t.startswith('GN=')]
-                    gene_name = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0].replace('GN=', '')
-                    protein_list.append({
-                        'protein_name': dup_prot['protein_name'],
-                        'protein_description': dup_prot['protein_description'],
-                        'gene_name': self.decoy_prefix + gene_name if dup_prot['protein_name'].startswith(self.decoy_prefix) else gene_name,
-                        'n_related_peptides': len(protein['peptide'])
-                    })
-            for peptide in prot['protein'][0]['peptide']:
-                sequence = peptide['peptide_sequence']
-                group_weight = peptide['group_weight']
-                n_sibling_peptides = peptide['n_sibling_peptides']
-                for prot_map in protein_list:
-                    prot_map['group_weight'] = group_weight
-                    prot_map['n_sibling_peptides'] = n_sibling_peptides
-
-                if sequence not in seq_prot_map.keys():
-                    seq_prot_map[sequence] = []
-                protein_names = [protein['protein_name'] for protein in seq_prot_map[sequence]]
-                for protein in protein_list:
-                    if protein['protein_name'] not in protein_names:
-                        seq_prot_map[sequence].append(deepcopy(protein))
-                        protein_names.append(protein['protein_name'])
-
-        # find the best protein for each sequence
-        seq_idx_map = {}
-        for sequence in seq_prot_map.keys():
-            protein_list = seq_prot_map[sequence]
-            max_weight = max(protein['group_weight'] for protein in protein_list)
-            indices = [i for i, protein in enumerate(protein_list) if protein['group_weight'] == max_weight]
-            if len(indices) == 1:
-                seq_idx_map[sequence] = indices[0]
-                continue
-
-            n_related_peptides = [protein_list[i]['n_related_peptides'] for i in indices]
-            max_related_peptides = max(n_related_peptides)
-            indices = [indices[i] for i in range(len(n_related_peptides)) if n_related_peptides[i] == max_related_peptides]
-            if len(indices) == 1:
-                seq_idx_map[sequence] = indices[0]
-                continue
-
-            protein_names = [protein_list[i]['protein_name'] for i in indices]
-            index = indices[protein_names.index(min(protein_names))]
-            seq_idx_map[sequence] = index
-
-        # prepare seq_prot_map for sequence-protein mapping
-        for sequence in seq_prot_map.keys():
-            protein_list = seq_prot_map[sequence]
-            best_index = seq_idx_map[sequence]
-            best_protein = protein_list[best_index]
-
-            mapped_proteins = [protein_list[i]['protein_name'] for i in range(len(protein_list)) if i != best_index]
-            mapped_proteins = list(set(mapped_proteins))
-            mapped_target_proteins = [protein_name for protein_name in mapped_proteins if not protein_name.startswith(self.decoy_prefix)]
-            mapped_decoy_proteins = [protein_name for protein_name in mapped_proteins if protein_name.startswith(self.decoy_prefix)]
-            mapped_proteins = sorted(mapped_target_proteins) + sorted(mapped_decoy_proteins)
-
-            mapped_genes = [protein_list[i]['gene_name'] for i in range(len(protein_list)) if i != best_index]
-            mapped_genes = list(set(mapped_genes))
-            mapped_target_genes = [gene_name for gene_name in mapped_genes if not gene_name.startswith(self.decoy_prefix)]
-            mapped_decoy_genes = [gene_name for gene_name in mapped_genes if gene_name.startswith(self.decoy_prefix)]
-            mapped_genes = sorted(mapped_target_genes) + sorted(mapped_decoy_genes)
-
-            seq_prot_map[sequence] = {'best_protein': best_protein, 'mapped_proteins': mapped_proteins, 'mapped_genes': mapped_genes}
-
-        for i, psm in self.psm_df.iterrows():
-            sequence = psm['sequence']
-            if sequence not in seq_prot_map.keys():
-                proteins = sorted([protein for protein in psm['protein'].split(';') if len(protein.strip()) > 0])
-                if len(proteins) == 0:
-                    continue
-                best_protein_name = proteins[0]
-                best_description = fasta_map[best_protein_name]
-                prot_desc_split = [t for t in best_description.split(' ') if t.startswith('GN=')]
-                best_gene_name = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0].replace('GN=', '')
-                mapped_proteins = proteins[1:]
-                mapped_genes = []
-                for mapped_protein in mapped_proteins:
-                    description = fasta_map[mapped_protein]
-                    prot_desc_split = [t for t in description.split(' ') if t.startswith('GN=')]
-                    gene_name = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0].replace('GN=', '')
-                    if mapped_protein.startswith(self.decoy_prefix):
-                        gene_name = self.decoy_prefix + gene_name
-                    mapped_genes.append(gene_name)
-                mapped_genes = list(set(mapped_genes))
-            else:
-                best_protein_name = seq_prot_map[sequence]['best_protein']['protein_name']
-                best_description = seq_prot_map[sequence]['best_protein']['protein_description']
-                best_gene_name = seq_prot_map[sequence]['best_protein']['gene_name']
-                mapped_proteins = seq_prot_map[sequence]['mapped_proteins']
-                mapped_genes = seq_prot_map[sequence]['mapped_genes']
-
-            self.psm_df.loc[i, 'protein'] = best_protein_name
-            is_decoy = best_protein_name.startswith(self.decoy_prefix)
-            protein_split = best_protein_name.split('|')
-            if len(protein_split) == 3:
-                protein_id = protein_split[1]
-                entry_name = protein_split[2]
-                self.psm_df.loc[i, 'protein_id'] = (self.decoy_prefix + protein_id) if is_decoy else protein_id
-                self.psm_df.loc[i, 'entry_name'] = (self.decoy_prefix + entry_name) if is_decoy else entry_name
-            self.psm_df.loc[i, 'gene'] = best_gene_name
-            self.psm_df.loc[i, 'protein_description'] = best_description
-            self.psm_df.loc[i, 'mapped_protein'] = ','.join(mapped_proteins)
-            self.psm_df.loc[i, 'mapped_gene'] = ','.join(mapped_genes)
-        (self.report_directory / 'peptide.pep.xml').unlink(missing_ok=True)
-        (self.report_directory / 'interact.prot.xml').unlink(missing_ok=True)
 
 
     def add_app_score(self):
@@ -296,6 +116,7 @@ class RunReporter:
             'protein': 'first',
             'protein_id': 'first',
             'entry_name': 'first',
+            'gene': 'first',
             'protein_description': 'first',
             'mapped_protein': 'first',
             'mapped_gene': 'first'
@@ -328,6 +149,7 @@ class RunReporter:
             'protein': 'first',
             'protein_id': 'first',
             'entry_name': 'first',
+            'gene': 'first',
             'protein_description': 'first',
             'mapped_protein': 'first',
             'mapped_gene': 'first'
@@ -391,9 +213,10 @@ class RunReporter:
         pdf.close()
         plt.close(fig)
 
+
 if __name__ == '__main__':
-    psm_df = pd.read_csv('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0225/JY_Class1_1M_DDA_60min_Slot1-10_1_541/psm.tsv', sep='\t')
-    run_reporter = RunReporter(report_directory='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0225/JY_Class1_1M_DDA_60min_Slot1-10_1_541',
+    psm_df = pd.read_csv('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552/psm.tsv', sep='\t')
+    run_reporter = RunReporter(report_directory='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552',
                                file_name='test', decoy_prefix='rev_')
     # psm_df['protein_id'] = ''
     # psm_df['entry_name'] = ''
@@ -401,7 +224,7 @@ if __name__ == '__main__':
     # psm_df['mapped_protein'] = ''
     run_reporter.psm_df = psm_df
     # run_reporter.add_app_score()
-    run_reporter.infer_protein('/mnt/d/data/Library/2025-02-25-decoys-contam-JY_var_splicing.fasta.fas')
+    # run_reporter.infer_protein('/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas')
     # run_reporter.generate_psm_report()
-    # run_reporter.generate_peptide_report()
-    # run_reporter.generate_sequence_report()
+    run_reporter.generate_peptide_report()
+    run_reporter.generate_sequence_report()
