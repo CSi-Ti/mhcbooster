@@ -5,6 +5,7 @@ import requests
 import shutil
 from pathlib import Path
 
+from future.moves import sys
 
 target_folder = Path(__file__).parent.parent.parent/'third_party'
 target_folder.mkdir(parents=True, exist_ok=True)
@@ -15,6 +16,9 @@ def install_msfragger(path):
     with zipfile.ZipFile(path, 'r') as zip_ref:
         zip_ref.extractall(target_folder)
         print('MSFragger installed to {}'.format(target_folder))
+    with zipfile.ZipFile(target_folder / 'jre-17.0.14.zip', 'r') as zip_ref:
+        zip_ref.extractall(target_folder)
+        print('Java runtime environment installed to {}'.format(target_folder))
 
 
 def install_autort(path):
@@ -87,3 +91,20 @@ def install_mixmhc2pred(path):
     with zipfile.ZipFile(path, 'r') as zip_ref:
         zip_ref.extractall(target_folder/'MixMHC2pred-2.0')
         print('MixMHC2pred installed to {}'.format(target_folder))
+
+def install():
+    args = sys.argv
+    if len(args) > 1:
+        folder_path = Path(args[1])
+        if (folder_path / 'MSFragger-4.1.zip').exists():
+            install_msfragger(folder_path / 'MSFragger-4.1.zip')
+        if (folder_path / 'AutoRT-master.zip').exists():
+            install_autort(folder_path / 'AutoRT-master.zip')
+        if (folder_path / 'bigmhc-master.zip').exists():
+            install_bigmhc(folder_path / 'bigmhc-master.zip')
+        if (folder_path / 'netMHCpan-4.1b.Linux.tar.gz').exists():
+            install_netmhcpan(folder_path / 'netMHCpan-4.1b.Linux.tar.gz')
+        if (folder_path / 'netMHCIIpan-4.3e.Linux.tar.gz').exists():
+            install_netmhcIIpan(folder_path / 'netMHCIIpan-4.3e.Linux.tar.gz')
+        if (folder_path / 'MixMHC2pred-2.0.zip').exists():
+            install_mixmhc2pred(folder_path / 'MixMHC2pred-2.0.zip')

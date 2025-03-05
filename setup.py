@@ -16,14 +16,15 @@ setup(
     author_email='ruimin.wang@yale.edu',
     entry_points={
         'console_scripts': ['mhcbooster = src.interface.mhcbooster_cli:run',
-                            'mhcbooster-gui = src.interface.mhcbooster_gui:run']
+                            'mhcbooster-gui = src.interface.mhcbooster_gui:run',
+                            'mhcbooster-package-installer = src.utils.package_installer:install']
     },
     classifiers=[
         "Programming Language :: Python :: 3.10",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
     ],
-    packages=['src', 'src.interface', 'src.model', 'src.predictors', 'src.report', 'src.utils'],
+    packages=['src', 'src.adapter', 'src.interface', 'src.model', 'src.predictors', 'src.report', 'src.utils'],
     python_requires='==3.10',
     install_requires=read_requirements(),
     include_package_data=True,

@@ -963,7 +963,7 @@ class MhcBoosterGUI(QWidget):
         print(command)
         commands.append(command)
         self.worker_thread.commands = commands
-        # self.worker_start()
+        self.worker_start()
 
 
     def add_log(self, message):
