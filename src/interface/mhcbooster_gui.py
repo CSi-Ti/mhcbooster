@@ -1,21 +1,20 @@
-# pip install PySide2
+
 import os
-import re
 import subprocess
 import sys
+import tempfile
 import webbrowser
-import logging
 import time
+import psutil
 from datetime import datetime
-from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtGui import QPixmap, QIcon, QTextCursor
+from PySide6.QtCore import Qt, QThread, Signal, QSettings
+from PySide6.QtGui import QPixmap, QIcon, QTextCursor, QFont
 from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QVBoxLayout, QLineEdit, QFileDialog, QHBoxLayout,
                                QCheckBox, QGridLayout, QSpinBox, QGroupBox,
-                               QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QSizePolicy, QRadioButton,
-                               QDoubleSpinBox, QProgressBar)
+                               QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QRadioButton,
+                               QDoubleSpinBox, QProgressBar, QTextBrowser)
 
 from src.utils.package_installer import *
 
@@ -26,8 +25,8 @@ from src import __version__
 
 def grid_layout(label, elements, n_same_row=4):
     g_layout = QGridLayout()
-    g_layout.setHorizontalSpacing(10)
-    g_layout.setVerticalSpacing(3)
+    g_layout.setHorizontalSpacing(8)
+    g_layout.setVerticalSpacing(2)
     for i, checkbox in enumerate(elements):
         row = i // n_same_row  # Every 5 checkboxes will be placed in a new row
         col = i % n_same_row  # Columns will repeat after every 5 checkboxes (like a 5-column grid)
@@ -67,28 +66,34 @@ class MhcBoosterGUI(QWidget):
             """)
 
         # GUI window
-        self.setWindowTitle('MhcBooster')
+        self.setWindowTitle('MHCBooster')
         self.setWindowIcon(QIcon(str(Path(__file__).parent/'caronlab_icon.png')))
         # self.setGeometry(100, 100, 800, 600)
         layout = QVBoxLayout()
-        # layout.setContentsMargins(50, 20, 50, 10) # left, top, right, bottom
-        layout.setSpacing(20)
+        layout.setContentsMargins(30, 20, 30, 10) # left, top, right, bottom
+        layout.setSpacing(10)
 
         ### INTRODUCTION
         logo_lab_label = QLabel()
         logo_pix_map = QPixmap(str(Path(__file__).parent/'caronlab.png')).scaled(200, 150, Qt.KeepAspectRatio)
         logo_lab_label.setPixmap(logo_pix_map)
         logo_lab_label.resize(logo_pix_map.size())
-        intro_label = QLabel('The Introduction of MhcBooster should be here. GitHub. Tutorial. Cite. CaronLab.')
+        intro_label = QLabel('<p style="line-height: 1.2;"><b>MHCBooster: An AI-powered Software to Boost DDA-based Immunopeptide Identification.</b><br>'
+                             'Authors: Ruimin Wang, Etienne Caron.<br>'
+                             'CaronLab: <a href="https://www.caronlab.org/">https://www.caronlab.org/</a><br>'
+                             'Affiliations: Yale School of Medicine, Department of Immunobiology.</p>')
+        intro_label.setOpenExternalLinks(True)
         intro_layout = QHBoxLayout()
+        intro_layout.setAlignment(Qt.AlignLeft)
         intro_layout.addWidget(logo_lab_label)
+        intro_layout.addSpacing(50)
         intro_layout.addWidget(intro_label)
         layout.addLayout(intro_layout)
 
 
         self.tab_widget = QTabWidget()
         self.add_main_tab()
-        self.add_reporter_tab()
+        # self.add_reporter_tab()
         self.add_config_tab()
         layout.addWidget(self.tab_widget)
 
@@ -99,10 +104,15 @@ class MhcBoosterGUI(QWidget):
 
         self.setLayout(layout)
 
+        self.restore_settings()
+
+    def closeEvent(self, event, /):
+        self.save_settings()
+        event.accept()
 
     def add_main_tab(self):
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(30, 20, 30, 20) # left, top, right, bottom
+        main_layout.setContentsMargins(10, 20, 10, 0) # left, top, right, bottom
         main_layout.setSpacing(20)
 
         ### FILE MANAGEMENT
@@ -112,10 +122,10 @@ class MhcBoosterGUI(QWidget):
         input_format_layout = QHBoxLayout()
         input_format_layout.setContentsMargins(0, 0, 0, 0)
         input_format_layout.setSpacing(30)
-        self.pin_radiobutton = QRadioButton('Run from PSM')
+        self.psm_radiobutton = QRadioButton('Run from PSM')
         self.raw_radiobutton = QRadioButton('Run from RAW (MSFragger)')
-        self.pin_radiobutton.setChecked(True)
-        input_format_layout.addWidget(self.pin_radiobutton)
+        self.psm_radiobutton.setChecked(True)
+        input_format_layout.addWidget(self.psm_radiobutton)
         input_format_layout.addWidget(self.raw_radiobutton)
         input_format_layout.setAlignment(Qt.AlignLeft)
         file_group_layout.addLayout(input_format_layout)
@@ -136,15 +146,27 @@ class MhcBoosterGUI(QWidget):
         psm_layout.addWidget(self.psm_button)
         psm_group_layout.addLayout(psm_layout)
 
+        # Fasta file
+        psm_fasta_label = QLabel('FASTA file: \t')
+        self.psm_fasta_inputbox = QLineEdit()
+        self.psm_fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file with decoys (for protein inference)...')
+        self.psm_fasta_button = QPushButton("Select")
+        self.psm_fasta_button.clicked.connect(self.open_file_dialog)
+        psm_fasta_layout = QHBoxLayout()
+        psm_fasta_layout.addWidget(psm_fasta_label)
+        psm_fasta_layout.addWidget(self.psm_fasta_inputbox)
+        psm_fasta_layout.addWidget(self.psm_fasta_button)
+        psm_group_layout.addLayout(psm_fasta_layout)
+
         # MzML folder
         mzml_label = QLabel('mzML folder: \t')
-        self.mzml_inputbox = QLineEdit()
-        self.mzml_inputbox.setPlaceholderText('Select mzML folder containing .mzML files with the same name as PSM files...')
+        self.psm_mzml_inputbox = QLineEdit()
+        self.psm_mzml_inputbox.setPlaceholderText('Select mzML folder containing .mzML files with the same name as PSM files (for MS2, CCS rescoring)...')
         self.mzml_button = QPushButton("Select")
         self.mzml_button.clicked.connect(self.open_folder_dialog)
         mzml_layout = QHBoxLayout()
         mzml_layout.addWidget(mzml_label)
-        mzml_layout.addWidget(self.mzml_inputbox)
+        mzml_layout.addWidget(self.psm_mzml_inputbox)
         mzml_layout.addWidget(self.mzml_button)
         psm_group_layout.addLayout(mzml_layout)
 
@@ -177,26 +199,26 @@ class MhcBoosterGUI(QWidget):
         raw_group_layout.addLayout(raw_layout)
 
         # fasta file
-        fasta_label = QLabel('FASTA file: \t')
-        self.fasta_inputbox = QLineEdit()
-        self.fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file...')
-        self.fasta_button = QPushButton("Select")
-        self.fasta_button.clicked.connect(self.open_file_dialog)
-        fasta_layout = QHBoxLayout()
-        fasta_layout.addWidget(fasta_label)
-        fasta_layout.addWidget(self.fasta_inputbox)
-        fasta_layout.addWidget(self.fasta_button)
-        raw_group_layout.addLayout(fasta_layout)
+        raw_fasta_label = QLabel('FASTA file: \t')
+        self.raw_fasta_inputbox = QLineEdit()
+        self.raw_fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file...')
+        self.raw_fasta_button = QPushButton("Select")
+        self.raw_fasta_button.clicked.connect(self.open_file_dialog)
+        raw_fasta_layout = QHBoxLayout()
+        raw_fasta_layout.addWidget(raw_fasta_label)
+        raw_fasta_layout.addWidget(self.raw_fasta_inputbox)
+        raw_fasta_layout.addWidget(self.raw_fasta_button)
+        raw_group_layout.addLayout(raw_fasta_layout)
 
         # parameter file
         param_label = QLabel('Parameter file: \t')
-        self.param_inputbox = QLineEdit()
-        self.param_inputbox.setPlaceholderText('Select fragger.params file...')
+        self.raw_param_inputbox = QLineEdit()
+        self.raw_param_inputbox.setPlaceholderText('Select fragger.params file...')
         self.param_button = QPushButton("Select")
         self.param_button.clicked.connect(self.open_file_dialog)
         param_layout = QHBoxLayout()
         param_layout.addWidget(param_label)
-        param_layout.addWidget(self.param_inputbox)
+        param_layout.addWidget(self.raw_param_inputbox)
         param_layout.addWidget(self.param_button)
         raw_group_layout.addLayout(param_layout)
 
@@ -222,7 +244,7 @@ class MhcBoosterGUI(QWidget):
         self.input_stacked_widget.addWidget(raw_group_widget)
 
         file_group_layout.addWidget(self.input_stacked_widget)
-        self.pin_radiobutton.clicked.connect(lambda: self.input_stacked_widget.setCurrentIndex(0))
+        self.psm_radiobutton.clicked.connect(lambda: self.input_stacked_widget.setCurrentIndex(0))
         self.raw_radiobutton.clicked.connect(lambda: self.input_stacked_widget.setCurrentIndex(1))
         file_groupbox.setLayout(file_group_layout)
         main_layout.addWidget(file_groupbox)
@@ -230,10 +252,11 @@ class MhcBoosterGUI(QWidget):
         ### MHC specific SCORES
         mhc_groupbox = QGroupBox('MHC Predictors')
         mhc_group_layout = QVBoxLayout()
-        mhc_group_layout.insertSpacing(0, 5)
-        mhc_group_layout.setSpacing(10)
+        # mhc_group_layout.insertSpacing(0, 5)
+        mhc_group_layout.setSpacing(5)
 
         # APP score
+        self.mhc_class = None
         mhc_I_label = QLabel('MHC-I Score:\t')
         mhc_I_models = ['NetMHCpan', 'MHCflurry', 'BigMHC']
         self.checkboxes_mhc_I = [QCheckBox(model) for model in mhc_I_models]
@@ -252,7 +275,7 @@ class MhcBoosterGUI(QWidget):
         # Alleles
         allele_label = QLabel('Alleles: \t   ')
         self.allele_inputbox = QLineEdit()
-        self.allele_inputbox.setPlaceholderText('Input alleles (e.g. HLA-A0101; DQB1*05:01) or Select allele map file...')
+        self.allele_inputbox.setPlaceholderText('Input alleles separated with space (e.g. HLA-A0101 DQB1*05:01) or Select allele map file...')
         self.allele_button = QPushButton("Select")
         self.allele_button.clicked.connect(self.open_file_dialog)
         allele_layout = QHBoxLayout()
@@ -267,8 +290,15 @@ class MhcBoosterGUI(QWidget):
         ### GENERAL SCORES
         gs_groupbox = QGroupBox('General Predictors')
         gs_group_layout = QVBoxLayout()
-        gs_group_layout.insertSpacing(0, 5)
-        gs_group_layout.setSpacing(20)
+        # gs_group_layout.insertSpacing(0, 5)
+        gs_group_layout.setSpacing(5)
+
+        # Auto select
+        ap_layout = QHBoxLayout()
+        self.ap_checkbox = QCheckBox('Auto-predict best combination')
+        self.ap_checkbox.toggled.connect(self.on_autopred_checkbox_toggled)
+        ap_layout.addWidget(self.ap_checkbox)
+        gs_group_layout.addLayout(ap_layout)
 
         # RT score
         rt_label = QLabel('RT Score: \t')
@@ -299,20 +329,6 @@ class MhcBoosterGUI(QWidget):
         ccs_layout = grid_layout(ccs_label, self.checkboxes_ccs)
         gs_group_layout.addLayout(ccs_layout)
 
-        # Peptide encoding
-        pe_label = QLabel('Sequence Feature:\t')
-        pe_models = ['Peptide Encoding']
-        self.checkboxes_pe = [QCheckBox(model) for model in pe_models]
-        pe_layout = grid_layout(pe_label, self.checkboxes_pe)
-        gs_group_layout.addLayout(pe_layout)
-
-        # Auto select
-        ap_layout = QHBoxLayout()
-        self.ap_checkbox = QCheckBox('Auto-predict best combination')
-        self.ap_checkbox.toggled.connect(self.on_autopred_checkbox_toggled)
-        ap_layout.addWidget(self.ap_checkbox)
-        gs_group_layout.addLayout(ap_layout)
-
         gs_groupbox.setLayout(gs_group_layout)
         main_layout.addWidget(gs_groupbox)
 
@@ -320,61 +336,125 @@ class MhcBoosterGUI(QWidget):
         ### RUN PARAMS
         rp_groupbox = QGroupBox('Run Parameters')
         rp_group_layout = QVBoxLayout()
-        rp_group_layout.insertSpacing(0, 5)
+        # rp_group_layout.insertSpacing(0, 5)
+        rp_group_layout.setSpacing(5)
 
         p1_layout = QHBoxLayout()
         p1_layout.setAlignment(Qt.AlignLeft)
 
+        # Peptide encoding
+        self.pe_checkbox = QCheckBox('Peptide Encoding')
+        self.pe_checkbox.setChecked(True)
+        p1_layout.addWidget(self.pe_checkbox)
+        p1_layout.addSpacing(30)
+
         # Fine tune
         self.ft_checkbox = QCheckBox('Fine tune')
         p1_layout.addWidget(self.ft_checkbox)
-        p1_layout.setAlignment(Qt.AlignLeft)
+        p1_layout.addSpacing(30)
+
+        # Protein Inference
+        self.pi_checkbox = QCheckBox('Protein Inference')
+        p1_layout.addWidget(self.pi_checkbox)
+        p1_layout.addSpacing(30)
+
+        # Remove Decoy
+        self.rd_checkbox = QCheckBox('Remove Decoy')
+        p1_layout.addWidget(self.rd_checkbox)
+        p1_layout.addSpacing(30)
+
+        # Remove Contamination
+        self.rc_checkbox = QCheckBox('Remove Contaminant')
+        p1_layout.addWidget(self.rc_checkbox)
         p1_layout.addSpacing(30)
 
         # Peptide length
         self.pl_checkbox = QCheckBox('Filter by length')
-        self.pl_min = QSpinBox()
-        self.pl_min.setRange(7, 20)
-        self.pl_min.setValue(8)
-        self.pl_max = QSpinBox()
-        self.pl_max.setRange(7, 20)
-        self.pl_max.setValue(15)
+        self.pl_min_spinbox = QSpinBox()
+        self.pl_min_spinbox.setRange(8, 30)
+        self.pl_min_spinbox.setValue(8)
+        self.pl_max_spinbox = QSpinBox()
+        self.pl_max_spinbox.setRange(8, 30)
+        self.pl_max_spinbox.setValue(15)
         p1_layout.addWidget(self.pl_checkbox)
-        p1_layout.addWidget(self.pl_min)
+        p1_layout.addWidget(self.pl_min_spinbox)
         p1_layout.addWidget(QLabel('-'))
-        p1_layout.addWidget(self.pl_max)
+        p1_layout.addWidget(self.pl_max_spinbox)
         p1_layout.addSpacing(30)
+        rp_group_layout.addLayout(p1_layout)
+
+        p2_layout = QHBoxLayout()
+        p2_layout.setAlignment(Qt.AlignLeft)
+
+        # FDR filtering
+        psm_fdr_label = QLabel('PSM FDR:')
+        self.psm_fdr_spinbox = QDoubleSpinBox()
+        self.psm_fdr_spinbox.setRange(0.000001, 1)
+        self.psm_fdr_spinbox.setValue(0.01)
+        self.psm_fdr_spinbox.setSingleStep(0.01)
+        pep_fdr_label = QLabel('Peptide FDR:')
+        self.pep_fdr_spinbox = QDoubleSpinBox()
+        self.pep_fdr_spinbox.setRange(0.000001, 1)
+        self.pep_fdr_spinbox.setValue(0.01)
+        self.pep_fdr_spinbox.setSingleStep(0.01)
+        seq_fdr_label = QLabel('Sequence FDR:')
+        self.seq_fdr_spinbox = QDoubleSpinBox()
+        self.seq_fdr_spinbox.setRange(0.000001, 1)
+        self.seq_fdr_spinbox.setValue(0.01)
+        self.seq_fdr_spinbox.setSingleStep(0.01)
+        fdr_layout = QHBoxLayout()
+        fdr_layout.setSpacing(35)
+        psm_fdr_layout = QHBoxLayout()
+        psm_fdr_layout.setSpacing(5)
+        psm_fdr_layout.addWidget(psm_fdr_label)
+        psm_fdr_layout.addWidget(self.psm_fdr_spinbox)
+        pep_fdr_layout = QHBoxLayout()
+        pep_fdr_layout.setSpacing(5)
+        pep_fdr_layout.addWidget(pep_fdr_label)
+        pep_fdr_layout.addWidget(self.pep_fdr_spinbox)
+        prot_fdr_layout = QHBoxLayout()
+        prot_fdr_layout.setSpacing(5)
+        prot_fdr_layout.addWidget(seq_fdr_label)
+        prot_fdr_layout.addWidget(self.seq_fdr_spinbox)
+        fdr_layout.addLayout(psm_fdr_layout)
+        fdr_layout.addLayout(pep_fdr_layout)
+        fdr_layout.addLayout(prot_fdr_layout)
+        fdr_layout.addSpacing(30)
+        p2_layout.addLayout(fdr_layout)
 
         # Koina
         koina_label = QLabel('Koina server URL: ')
         self.koina_inputbox = QLineEdit('koina.wilhelmlab.org:443')
-        p1_layout.addWidget(koina_label)
-        p1_layout.addWidget(self.koina_inputbox)
-        p1_layout.addSpacing(30)
+        p2_layout.addWidget(koina_label)
+        p2_layout.addWidget(self.koina_inputbox)
+        p2_layout.addSpacing(30)
 
         # Max thread
         self.thread_label = QLabel('Threads: ')
-        self.spinbox_thread = QSpinBox()
-        self.spinbox_thread.setRange(1, os.cpu_count() - 1)
-        self.spinbox_thread.setValue(os.cpu_count() - 1)
-        p1_layout.addWidget(self.thread_label)
-        p1_layout.addWidget(self.spinbox_thread)
-        p1_layout.addSpacing(80)
-        rp_group_layout.addLayout(p1_layout)
+        self.thread_spinbox = QSpinBox()
+        self.thread_spinbox.setRange(1, os.cpu_count() - 1)
+        self.thread_spinbox.setValue(os.cpu_count() - 1)
+        p2_layout.addWidget(self.thread_label)
+        p2_layout.addWidget(self.thread_spinbox)
+        p2_layout.addSpacing(30)
+        rp_group_layout.addLayout(p2_layout)
 
         rp_groupbox.setLayout(rp_group_layout)
         main_layout.addWidget(rp_groupbox)
 
         ### Logger
+        run_layout = QVBoxLayout()
+        run_layout.setSpacing(10)
         self.log_output = QTextEdit()
         self.log_output.setReadOnly(True)
-        self.log_output.setFixedHeight(150)
-        main_layout.addWidget(self.log_output)
+        self.log_output.setFixedHeight(120)
+        run_layout.addWidget(self.log_output)
 
         ### Execution
         self.button_run = QPushButton("RUN")
         self.button_run.clicked.connect(self.on_exec_clicked)
-        main_layout.addWidget(self.button_run)
+        run_layout.addWidget(self.button_run)
+        main_layout.addLayout(run_layout)
 
         self.worker_thread = MhcBoosterWorker(commands=None)
         self.worker_thread.message.connect(self.add_log)
@@ -382,17 +462,18 @@ class MhcBoosterGUI(QWidget):
 
         main_tab = QWidget()
         main_tab.setLayout(main_layout)
-        self.tab_widget.addTab(main_tab, 'Identification')
+        self.tab_widget.addTab(main_tab, 'Run')
 
 
     def add_config_tab(self):
         config_layout = QVBoxLayout()
-        config_layout.setContentsMargins(30, 20, 30, 20) # left, top, right, bottom
+        config_layout.setContentsMargins(10, 20, 10, 0) # left, top, right, bottom
         config_layout.setSpacing(20)
         config_layout.setAlignment(Qt.AlignTop)
 
         third_party_groupbox = QGroupBox('Third-party tools')
         third_party_layout = QVBoxLayout()
+        third_party_layout.setSpacing(5)
 
         # Introduction
         introduction_label = QLabel('MHCBooster utilizes a variety of tools for RT, MS2, and CCS scoring.'
@@ -402,7 +483,7 @@ class MhcBoosterGUI(QWidget):
                                     ' the \'Install to MHCBooster\' button.')
         introduction_label.setWordWrap(True)
         introduction_label_layout = QHBoxLayout()
-        introduction_label_layout.setContentsMargins(0, 10, 0, 20)
+        introduction_label_layout.setContentsMargins(0, 5, 0, 10)
         introduction_label_layout.addWidget(introduction_label)
         third_party_layout.addLayout(introduction_label_layout)
 
@@ -467,7 +548,7 @@ class MhcBoosterGUI(QWidget):
         third_party_layout.addLayout(netmhcpan_layout)
 
         # NetMHCIIpan
-        netmhcIIpan_label = QLabel('NetMHCIIpan path:\t')
+        netmhcIIpan_label = QLabel('NetMHCIIpan path:')
         self.netmhcIIpan_inputbox = QLineEdit()
         self.netmhcIIpan_inputbox.setPlaceholderText("Select the path to netMHCIIpan-4.3e.Linux.tar.gz ...")
         self.netmhcIIpan_browse_button = QPushButton("Browse")
@@ -532,12 +613,35 @@ class MhcBoosterGUI(QWidget):
 
         cite_groupbox = QGroupBox('How to cite')
         cite_layout = QVBoxLayout()
-        cite = ('MHCBooster: <br>'
-                'cite info<br>'
-                'Third-party tools:<br>'
-                'MSFragger:<br>'
-                'Koina:<br>')
-        cite_text = QTextEdit()
+        cite = ('MHCBooster: in developing; '
+                '            <a href="https://doi.org/10.1038/s41467-024-54734-9">https://doi.org/10.1038/s41467-024-54734-9</a><br>'
+                '<br>'
+                '<br>'
+                'MSFragger: <a href="https://doi.org/10.1038/nmeth.4256">https://doi.org/10.1038/nmeth.4256</a>; '
+                '       <a href="https://doi.org/10.1038/s41467-020-17921-y">https://doi.org/10.1038/s41467-020-17921-y</a><br>'
+                'NetMHCpan: <a href="https://doi.org/10.1093/nar/gkaa379">https://doi.org/10.1093/nar/gkaa379</a><br>'
+                'MHCflurry: <a href="https://doi.org/10.1016/j.cels.2020.06.010">https://doi.org/10.1016/j.cels.2020.06.010</a><br>'
+                'BigMHC: <a href="https://doi.org/10.1038/s42256-023-00694-6">https://doi.org/10.1038/s42256-023-00694-6</a><br>'
+                'NetMHCIIpan: <a href="https://doi.org/10.1126/sciadv.adj6367">https://doi.org/10.1126/sciadv.adj6367</a><br>'
+                'MixMHC2pred: <a href="https://doi.org/10.1038/s41587-019-0289-6">https://doi.org/10.1038/s41587-019-0289-6</a>; '
+                '       <a href="https://doi.org/10.1016/j.immuni.2023.03.009">https://doi.org/10.1016/j.immuni.2023.03.009</a><br>'
+                'AutoRT: <a href="https://doi.org/10.1038/s41467-020-15456-w">https://doi.org/10.1038/s41467-020-15456-w</a><br>'
+                'DeepLC: <a href="https://doi.org/10.1038/s41592-021-01301-5">https://doi.org/10.1038/s41592-021-01301-5</a><br>'
+                'AlphaPeptDeep: <a href="https://doi.org/10.1038/s41467-022-34904-3">https://doi.org/10.1038/s41467-022-34904-3</a><br>'
+                'Prosit: <a href="https://doi.org/10.1038/s41592-019-0426-7">https://doi.org/10.1038/s41592-019-0426-7</a>; '
+                '       <a href="https://doi.org/10.1038/s41467-021-23713-9">https://doi.org/10.1038/s41467-021-23713-9</a>; <br>'
+                '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'
+                '       <a href="https://doi.org/10.1038/s41467-024-48322-0">https://doi.org/10.1038/s41467-024-48322-0</a>; '
+                '       <a href="https://doi.org/10.1021/acs.analchem.1c05435">https://doi.org/10.1021/acs.analchem.1c05435</a><br>'
+                'Chronologer: <a href="https://doi.org/10.1101/2023.05.30.542978">https://doi.org/10.1101/2023.05.30.542978</a><br>'
+                'MS2PIP: <a href="https://doi.org/10.1093/nar/gkad335">https://doi.org/10.1093/nar/gkad335</a><br>'
+                'IM2Deep: <a href="https://doi.org/10.1021/acs.jproteome.4c00609">https://doi.org/10.1021/acs.jproteome.4c00609</a><br>'
+                'Koina: <a href="https://doi.org/10.1101/2024.06.01.596953">https://doi.org/10.1101/2024.06.01.596953</a><br>'
+                'ProteinProphet: <a href="https://doi.org/10.1021/ac0341261">https://doi.org/10.1021/ac0341261</a><br>'
+                'Philosopher: <a href="https://doi.org/10.1038/s41592-020-0912-y">https://doi.org/10.1038/s41592-020-0912-y</a><br>'
+                )
+        cite_text = QTextBrowser()
+        cite_text.setOpenExternalLinks(True)
         cite_text.setHtml(cite)
         cite_text.setReadOnly(True)
         cite_layout.addWidget(cite_text)
@@ -547,311 +651,6 @@ class MhcBoosterGUI(QWidget):
         config_tab = QWidget()
         config_tab.setLayout(config_layout)
         self.tab_widget.addTab(config_tab, 'Configuration')
-
-
-    def add_reporter_tab(self):
-
-        reporter_layout = QVBoxLayout()
-        reporter_layout.setContentsMargins(30, 20, 30, 20) # left, top, right, bottom
-        reporter_layout.setSpacing(20)
-        reporter_layout.setAlignment(Qt.AlignTop)
-
-        # # Introduction
-        # introduction_label = QLabel('Add some descriptions and links here')
-        # introduction_label.setWordWrap(True)
-        # introduction_label_layout = QHBoxLayout()
-        # introduction_label_layout.setContentsMargins(0, 10, 0, 20)
-        # introduction_label_layout.addWidget(introduction_label)
-        # reporter_layout.addLayout(introduction_label_layout)
-
-
-        ### Input / Output
-        input_output_groupbox = QGroupBox('Input / Output')
-        input_output_layout = QVBoxLayout()
-        input_output_layout.insertSpacing(0, 5)
-
-        # Input result folder (support MHCBooster, Percolator, Mokapot, Philosopher?)
-        result_path_label = QLabel('Result folder: \t')
-        self.result_inputbox = QLineEdit()
-        self.result_inputbox.setPlaceholderText("Select the MHCBooster results folder for which you want a custom report...")
-        self.result_button = QPushButton("Select")
-        self.result_button.clicked.connect(self.open_folder_dialog)
-        result_layout = QHBoxLayout()
-        result_layout.addWidget(result_path_label)
-        result_layout.addWidget(self.result_inputbox)
-        result_layout.addWidget(self.result_button)
-        input_output_layout.addLayout(result_layout)
-        input_output_groupbox.setLayout(input_output_layout)
-        reporter_layout.addWidget(input_output_groupbox)
-
-        ### Peptide
-        # Alignment & MBR?
-        # Missing value imputation？
-        # Intensity normalization?
-        pept_info_groupbox = QGroupBox('Peptide Info')
-        pept_info_layout = QVBoxLayout()
-        pept_info_layout.insertSpacing(0, 5)
-        pept_info_layout.setSpacing(20)
-
-        self.binder_checkbox = QCheckBox('Binder prediction')
-
-        self.netmhcpan_checkbox = QCheckBox('NetMHCpan')
-        netmhcpan_strong_label = QLabel('\tStrong Rank (%)')
-        self.netmhcpan_strong_spinbox = QDoubleSpinBox()
-        self.netmhcpan_strong_spinbox.setRange(0.001, 100)
-        self.netmhcpan_strong_spinbox.setValue(0.5)
-        self.netmhcpan_strong_spinbox.setSingleStep(0.1)
-        netmhcpan_weak_label = QLabel('Weak Rank (%)')
-        self.netmhcpan_weak_spinbox = QDoubleSpinBox()
-        self.netmhcpan_weak_spinbox.setRange(0.001, 100)
-        self.netmhcpan_weak_spinbox.setValue(2)
-        self.netmhcpan_weak_spinbox.setSingleStep(0.5)
-
-        self.mhcflurry_checkbox = QCheckBox('MHCflurry')
-        mhcflurry_strong_label = QLabel('\tStrong Rank (%)')
-        self.mhcflurry_strong_spinbox = QDoubleSpinBox()
-        self.mhcflurry_strong_spinbox.setRange(0.001, 100)
-        self.mhcflurry_strong_spinbox.setValue(0.5)
-        self.mhcflurry_strong_spinbox.setSingleStep(0.1)
-        mhcflurry_weak_label = QLabel('Weak Rank (%)')
-        self.mhcflurry_weak_spinbox = QDoubleSpinBox()
-        self.mhcflurry_weak_spinbox.setRange(0.001, 100)
-        self.mhcflurry_weak_spinbox.setValue(2)
-        self.mhcflurry_weak_spinbox.setSingleStep(0.5)
-
-        self.bigmhc_checkbox = QCheckBox('BigMHC')
-        bigmhc_strong_label = QLabel('\tStrong Rank (%)')
-        self.bigmhc_strong_spinbox = QDoubleSpinBox()
-        self.bigmhc_strong_spinbox.setRange(0.001, 100)
-        self.bigmhc_strong_spinbox.setValue(0.5)
-        self.bigmhc_strong_spinbox.setSingleStep(0.1)
-        bigmhc_weak_label = QLabel('Weak Rank (%)')
-        self.bigmhc_weak_spinbox = QDoubleSpinBox()
-        self.bigmhc_weak_spinbox.setRange(0.001, 100)
-        self.bigmhc_weak_spinbox.setValue(2)
-        self.bigmhc_weak_spinbox.setSingleStep(0.5)
-
-        self.netmhcIIpan_checkbox = QCheckBox('NetMHCIIpan')
-        netmhcIIpan_strong_label = QLabel('\tStrong Rank (%)')
-        self.netmhcIIpan_strong_spinbox = QDoubleSpinBox()
-        self.netmhcIIpan_strong_spinbox.setRange(0.001, 100)
-        self.netmhcIIpan_strong_spinbox.setValue(0.5)
-        self.netmhcIIpan_strong_spinbox.setSingleStep(0.1)
-        netmhcIIpan_weak_label = QLabel('Weak Rank (%)')
-        self.netmhcIIpan_weak_spinbox = QDoubleSpinBox()
-        self.netmhcIIpan_weak_spinbox.setRange(0.001, 100)
-        self.netmhcIIpan_weak_spinbox.setValue(2)
-        self.netmhcIIpan_weak_spinbox.setSingleStep(0.5)
-
-        self.mixmhc2pred_checkbox = QCheckBox('MixMHC2pred')
-        mixmhc2pred_strong_label = QLabel('\tStrong Rank (%)')
-        self.mixmhc2pred_strong_spinbox = QDoubleSpinBox()
-        self.mixmhc2pred_strong_spinbox.setRange(0.001, 100)
-        self.mixmhc2pred_strong_spinbox.setValue(0.5)
-        self.mixmhc2pred_strong_spinbox.setSingleStep(0.1)
-        mixmhc2pred_weak_label = QLabel('Weak Rank (%)')
-        self.mixmhc2pred_weak_spinbox = QDoubleSpinBox()
-        self.mixmhc2pred_weak_spinbox.setRange(0.001, 100)
-        self.mixmhc2pred_weak_spinbox.setValue(2)
-        self.mixmhc2pred_weak_spinbox.setSingleStep(0.5)
-
-        binder_layout = QHBoxLayout()
-        binder_layout.setAlignment(Qt.AlignLeft)
-        binder_checkbox_layout = QVBoxLayout()
-        binder_checkbox_layout.setAlignment(Qt.AlignTop)
-        binder_checkbox_layout.addWidget(self.binder_checkbox)
-        binder_layout.addLayout(binder_checkbox_layout)
-        binder_layout.addSpacing(100)
-
-        binder_tool_layout = QVBoxLayout()
-        binder_tool_layout.setSpacing(5)
-        binder_tool_layout.addWidget(self.netmhcpan_checkbox)
-        binder_tool_layout.addWidget(self.mhcflurry_checkbox)
-        binder_tool_layout.addWidget(self.bigmhc_checkbox)
-        binder_tool_layout.addWidget(self.netmhcIIpan_checkbox)
-        binder_tool_layout.addWidget(self.mixmhc2pred_checkbox)
-        binder_layout.addLayout(binder_tool_layout)
-
-        binder_rank_layout = QVBoxLayout()
-        binder_rank_layout.setSpacing(5)
-        netmhcpan_layout = QHBoxLayout()
-        netmhcpan_layout.addWidget(netmhcpan_strong_label)
-        netmhcpan_layout.addWidget(self.netmhcpan_strong_spinbox)
-        netmhcpan_layout.addWidget(netmhcpan_weak_label)
-        netmhcpan_layout.addWidget(self.netmhcpan_weak_spinbox)
-        binder_rank_layout.addLayout(netmhcpan_layout)
-
-        mhcflurry_layout = QHBoxLayout()
-        mhcflurry_layout.addWidget(mhcflurry_strong_label)
-        mhcflurry_layout.addWidget(self.mhcflurry_strong_spinbox)
-        mhcflurry_layout.addWidget(mhcflurry_weak_label)
-        mhcflurry_layout.addWidget(self.mhcflurry_weak_spinbox)
-        binder_rank_layout.addLayout(mhcflurry_layout)
-
-        bigmhc_layout = QHBoxLayout()
-        bigmhc_layout.addWidget(bigmhc_strong_label)
-        bigmhc_layout.addWidget(self.bigmhc_strong_spinbox)
-        bigmhc_layout.addWidget(bigmhc_weak_label)
-        bigmhc_layout.addWidget(self.bigmhc_weak_spinbox)
-        binder_rank_layout.addLayout(bigmhc_layout)
-
-        netmhcIIpan_layout = QHBoxLayout()
-        netmhcIIpan_layout.addWidget(netmhcIIpan_strong_label)
-        netmhcIIpan_layout.addWidget(self.netmhcIIpan_strong_spinbox)
-        netmhcIIpan_layout.addWidget(netmhcIIpan_weak_label)
-        netmhcIIpan_layout.addWidget(self.netmhcIIpan_weak_spinbox)
-        binder_rank_layout.addLayout(netmhcIIpan_layout)
-
-        mixmhc2pred_layout = QHBoxLayout()
-        mixmhc2pred_layout.addWidget(mixmhc2pred_strong_label)
-        mixmhc2pred_layout.addWidget(self.mixmhc2pred_strong_spinbox)
-        mixmhc2pred_layout.addWidget(mixmhc2pred_weak_label)
-        mixmhc2pred_layout.addWidget(self.mixmhc2pred_weak_spinbox)
-        binder_rank_layout.addLayout(mixmhc2pred_layout)
-
-        binder_rank_widget = QWidget()
-        binder_rank_widget.setFixedWidth(600)
-        binder_rank_widget.setLayout(binder_rank_layout)
-        binder_layout.addWidget(binder_rank_widget)
-        binder_layout.addSpacing(100)
-        pept_info_layout.addLayout(binder_layout)
-
-        # Immunogenicity prediction
-        self.ig_checkbox = QCheckBox('Immunogenicity prediction')
-        ig_layout = QHBoxLayout()
-        ig_layout.setAlignment(Qt.AlignLeft)
-        ig_layout.addWidget(self.ig_checkbox)
-        pept_info_layout.addLayout(ig_layout)
-        # Logo analysis
-
-        pept_info_groupbox.setLayout(pept_info_layout)
-        reporter_layout.addWidget(pept_info_groupbox)
-
-
-        ### Protein
-        prot_info_groupbox = QGroupBox('Protein Info')
-        prot_info_layout = QVBoxLayout()
-        prot_info_layout.insertSpacing(0, 5)
-        prot_info_layout.setSpacing(20)
-
-        protein_prophet_checkbox = QCheckBox('Protein inference (ProteinProphet)')
-        protein_prophet_label = QLabel('CLI params:')
-        self.protein_prophet_inputbox = QLineEdit()
-        self.protein_prophet_inputbox.setText('--maxppmdiff 2000000')
-        protein_prophet_layout = QHBoxLayout()
-        protein_prophet_layout.setSpacing(5)
-        protein_prophet_layout.addWidget(protein_prophet_label)
-        protein_prophet_layout.addWidget(self.protein_prophet_inputbox)
-        prot_infer_layout = QHBoxLayout()
-        prot_infer_layout.setSpacing(50)
-        prot_infer_layout.addWidget(protein_prophet_checkbox)
-        prot_infer_layout.addLayout(protein_prophet_layout)
-        prot_info_layout.addLayout(prot_infer_layout)
-
-        fasta_checkbox = QCheckBox('Extract protein details from fasta')
-        report_fasta_label = QLabel('FASTA path: ')
-        self.report_fasta_inputbox = QLineEdit()
-        self.report_fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file...')
-        self.report_fasta_button = QPushButton("Select")
-        self.report_fasta_button.clicked.connect(self.open_file_dialog)
-        fasta_input_layout = QHBoxLayout()
-        fasta_input_layout.setSpacing(5)
-        fasta_input_layout.addWidget(report_fasta_label)
-        fasta_input_layout.addWidget(self.report_fasta_inputbox)
-        fasta_input_layout.addWidget(self.report_fasta_button)
-        report_fasta_layout = QHBoxLayout()
-        report_fasta_layout.setSpacing(50)
-        report_fasta_layout.addWidget(fasta_checkbox)
-        report_fasta_layout.addLayout(fasta_input_layout)
-        prot_info_layout.addLayout(report_fasta_layout)
-
-        prot_info_groupbox.setLayout(prot_info_layout)
-        reporter_layout.addWidget(prot_info_groupbox)
-
-
-        ### Report
-        report_groupbox = QGroupBox('Report')
-        report_layout = QVBoxLayout()
-        report_layout.insertSpacing(0, 5)
-        report_layout.setSpacing(20)
-
-        # FDR
-        self.fdr_checkbox = QCheckBox('FDR filter')
-        psm_fdr_label = QLabel('PSM FDR:')
-        self.psm_fdr_spinbox = QDoubleSpinBox()
-        self.psm_fdr_spinbox.setRange(0.000001, 1)
-        self.psm_fdr_spinbox.setValue(0.01)
-        self.psm_fdr_spinbox.setSingleStep(0.01)
-        pep_fdr_label = QLabel('Peptide FDR:')
-        self.pep_fdr_spinbox = QDoubleSpinBox()
-        self.pep_fdr_spinbox.setRange(0.000001, 1)
-        self.pep_fdr_spinbox.setValue(0.01)
-        self.pep_fdr_spinbox.setSingleStep(0.01)
-        prot_fdr_label = QLabel('Protein FDR:')
-        self.prot_fdr_spinbox = QDoubleSpinBox()
-        self.prot_fdr_spinbox.setRange(0.000001, 1)
-        self.prot_fdr_spinbox.setValue(0.01)
-        self.prot_fdr_spinbox.setSingleStep(0.01)
-
-        fdr_layout = QHBoxLayout()
-        fdr_layout.setSpacing(50)
-        psm_fdr_layout = QHBoxLayout()
-        psm_fdr_layout.setSpacing(5)
-        psm_fdr_layout.addWidget(psm_fdr_label)
-        psm_fdr_layout.addWidget(self.psm_fdr_spinbox)
-        pep_fdr_layout = QHBoxLayout()
-        pep_fdr_layout.setSpacing(5)
-        pep_fdr_layout.addWidget(pep_fdr_label)
-        pep_fdr_layout.addWidget(self.pep_fdr_spinbox)
-        prot_fdr_layout = QHBoxLayout()
-        prot_fdr_layout.setSpacing(5)
-        prot_fdr_layout.addWidget(prot_fdr_label)
-        prot_fdr_layout.addWidget(self.prot_fdr_spinbox)
-        fdr_layout.addWidget(self.fdr_checkbox)
-        fdr_layout.addLayout(psm_fdr_layout)
-        fdr_layout.addLayout(pep_fdr_layout)
-        fdr_layout.addLayout(prot_fdr_layout)
-        fdr_layout.addSpacing(300)
-        report_layout.addLayout(fdr_layout)
-        report_groupbox.setLayout(report_layout)
-        reporter_layout.addWidget(report_groupbox)
-
-        # Contaminants
-        self.contam_checkbox = QCheckBox('Remove contaminants')
-        contam_fasta_label = QLabel('Custom contaminant FASTA (optional): ')
-        self.contam_fasta_inputbox = QLineEdit()
-        self.contam_fasta_inputbox.setPlaceholderText('Select .fasta or .fasta.fas file for custom contaminants...')
-        self.contam_fasta_button = QPushButton("Select")
-        self.contam_fasta_button.clicked.connect(self.open_file_dialog)
-        contam_layout = QHBoxLayout()
-        contam_layout.setSpacing(50)
-        contam_fasta_layout = QHBoxLayout()
-        contam_fasta_layout.setSpacing(5)
-        contam_fasta_layout.addWidget(contam_fasta_label)
-        contam_fasta_layout.addWidget(self.contam_fasta_inputbox)
-        contam_fasta_layout.addWidget(self.contam_fasta_button)
-        contam_layout.addWidget(self.contam_checkbox)
-        contam_layout.addLayout(contam_fasta_layout)
-        report_layout.addLayout(contam_layout)
-
-        ### Logger
-        self.reporter_log_output = QTextEdit()
-        self.reporter_log_output.setReadOnly(True)
-        # self.reporter_log_output.setFixedHeight(150)
-        reporter_layout.addWidget(self.reporter_log_output)
-
-        ### Execution
-        reporter_open_button = QPushButton("Open result folder")
-        reporter_run_button = QPushButton('Generate report')
-        reporter_run_layout = QHBoxLayout()
-        # reporter_run_layout.setAlignment(Qt.AlignRight)
-        reporter_run_layout.addWidget(reporter_open_button)
-        reporter_run_layout.addWidget(reporter_run_button)
-        reporter_layout.addLayout(reporter_run_layout)
-
-        reporter_tab = QWidget()
-        reporter_tab.setLayout(reporter_layout)
-        self.tab_widget.addTab(reporter_tab, 'Report')
 
 
     def open_folder_dialog(self):
@@ -864,17 +663,15 @@ class MhcBoosterGUI(QWidget):
             if sender == self.psm_button:
                 self.psm_inputbox.setText(selected_path)
             elif sender == self.mzml_button:
-                self.mzml_inputbox.setText(selected_path)
+                self.psm_mzml_inputbox.setText(selected_path)
             elif sender == self.psm_output_button:
                 self.psm_output_inputbox.setText(selected_path)
-                self.result_inputbox.setText(selected_path)
+                self.raw_output_inputbox.setText(selected_path)
             elif sender == self.raw_button:
                 self.raw_inputbox.setText(selected_path)
             elif sender == self.raw_output_button:
                 self.raw_output_inputbox.setText(selected_path)
-                self.result_inputbox.setText(selected_path)
-            elif sender == self.result_button:
-                self.result_inputbox.setText(selected_path)
+                self.psm_output_inputbox.setText(selected_path)
 
     def open_file_dialog(self):
         sender = self.sender()
@@ -885,15 +682,14 @@ class MhcBoosterGUI(QWidget):
             selected_path = file_dialog.selectedFiles()[0]
             if sender == self.allele_button:
                 self.allele_inputbox.setText(selected_path)
-            elif sender == self.fasta_button:
-                self.fasta_inputbox.setText(selected_path)
-                self.report_fasta_inputbox.setText(selected_path)
-            elif sender == self.report_fasta_button:
-                self.report_fasta_inputbox.setText(selected_path)
-            elif sender == self.contam_fasta_button:
-                self.contam_fasta_inputbox.setText(selected_path)
+            elif sender == self.psm_fasta_button:
+                self.psm_fasta_inputbox.setText(selected_path)
+                self.raw_fasta_inputbox.setText(selected_path)
+            elif sender == self.raw_fasta_button:
+                self.raw_fasta_inputbox.setText(selected_path)
+                self.psm_fasta_inputbox.setText(selected_path)
             elif sender == self.param_button:
-                self.param_inputbox.setText(selected_path)
+                self.raw_param_inputbox.setText(selected_path)
             elif sender == self.msfragger_browse_button:
                 self.msfragger_inputbox.setText(selected_path)
             elif sender == self.autort_browse_button:
@@ -910,20 +706,30 @@ class MhcBoosterGUI(QWidget):
 
     def on_mhc_I_checkbox_toggled(self, checked):
         if checked:
+            self.mhc_class = 'I'
+            self.pl_min_spinbox.setRange(8, 15)
+            self.pl_max_spinbox.setRange(8, 15)
+            self.pl_min_spinbox.setValue(min(max(8, self.pl_min_spinbox.value()), 15))
+            self.pl_max_spinbox.setValue(min(max(8, self.pl_max_spinbox.value()), 15))
             for checkbox in self.checkboxes_mhc_II:
                 checkbox.setChecked(False)
 
     def on_mhc_II_checkbox_toggled(self, checked):
         if checked:
+            self.mhc_class = 'II'
+            self.pl_min_spinbox.setRange(9, 30)
+            self.pl_max_spinbox.setRange(9, 30)
+            self.pl_min_spinbox.setValue(min(max(9, self.pl_min_spinbox.value()), 30))
+            self.pl_max_spinbox.setValue(min(max(9, self.pl_max_spinbox.value()), 30))
             for checkbox in self.checkboxes_mhc_I:
                 checkbox.setChecked(False)
 
     def on_autopred_checkbox_toggled(self, checked):
         if checked:
-            for checkbox in self.checkboxes_rt + self.checkboxes_ms2 + self.checkboxes_ccs + self.checkboxes_pe:
+            for checkbox in self.checkboxes_rt + self.checkboxes_ms2 + self.checkboxes_ccs:
                 checkbox.setDisabled(True)
         else:
-            for checkbox in self.checkboxes_rt + self.checkboxes_ms2 + self.checkboxes_ccs + self.checkboxes_pe:
+            for checkbox in self.checkboxes_rt + self.checkboxes_ms2 + self.checkboxes_ccs:
                 checkbox.setDisabled(False)
 
     def show_message(self, message):
@@ -951,10 +757,11 @@ class MhcBoosterGUI(QWidget):
 
     def on_exec_clicked(self):
         if self.button_run.text() == 'RUN':
+            self.log_output.setText('')
             self.run()
         else:
+            self.add_log('Termination triggered...')
             self.worker_stop()
-            self.add_log('Process terminated.')
 
     def on_install_clicked(self):
         self.progress_bar.setVisible(True)
@@ -1002,18 +809,53 @@ class MhcBoosterGUI(QWidget):
         self.worker_thread.start()
 
     def worker_stop(self):
-        self.add_log(f'Stopping subprocess...')
-        start_time = time.time()
         self.worker_thread.stop()
-        print(time.time() - start_time)
         self.button_run.setText('RUN')
 
 
     def run(self):
         self.add_log(f'Running MhcBooster {__version__}...')
+
+        commands = []
+        if self.raw_radiobutton.isChecked():
+            java_exe_path = Path(__file__).parent.parent.parent/'third_party'/'jre-17.0.14'/'bin'/'java'
+            msfragger_exe_path = Path(__file__).parent.parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
+            msfragger_split_path = Path(__file__).parent.parent.parent/'third_party'/'msfragger_pep_split.py'
+            avail_mem = psutil.virtual_memory().available / (1024 ** 3)
+            fasta_size =  Path('/mnt/d/Out_27.csv').stat().st_size / (1024 ** 2)
+            split = int(fasta_size / avail_mem * 8)
+
+            param_path = self.raw_param_inputbox.text()
+            param_data = list(open(param_path).read().splitlines())
+            param_data = [line for line in param_data if not line.startswith('database_name')
+                          and not line.startswith('num_threads')]
+            param_data.insert(0, f'database_name = {self.raw_fasta_inputbox.text()}')
+            param_data.insert(1, f'num_threads = {self.thread_spinbox.value()}')
+            with tempfile.NamedTemporaryFile('w', delete=False) as tmp_param_file:
+                tmp_param_file.write('\n'.join(param_data))
+                tmp_param_file.flush()
+
+            for raw_file in Path(self.raw_inputbox.text()).iterdir():
+                if raw_file.suffix not in {'.d', '.raw', '.RAW', '.wiff'}:
+                    continue
+                if raw_file.with_suffix('.pin').exists():
+                    continue
+                if split > 1:
+                    command = (f'python {msfragger_split_path} {split} "{java_exe_path} -jar -Dfile.encoding=UTF-8"'
+                               f' {msfragger_exe_path} {tmp_param_file.name} {raw_file}')
+                else:
+                    command = (f'{java_exe_path} -jar -Dfile.encoding=UTF-8 {msfragger_exe_path} '
+                               f'{tmp_param_file.name} {raw_file}')
+                commands.append(command)
+            self.psm_inputbox.setText(self.raw_inputbox.text())
+            self.psm_fasta_inputbox.setText(self.raw_fasta_inputbox.text())
+            self.psm_mzml_inputbox.setText(self.raw_inputbox.text())
+            self.psm_output_inputbox.setText(self.raw_output_inputbox.text())
+
         # File
         psm_folder = Path(self.psm_inputbox.text())
-        mzml_folder = self.mzml_inputbox.text()
+        fasta_path = self.psm_fasta_inputbox.text()
+        mzml_folder = self.psm_mzml_inputbox.text()
         output_folder = Path(self.psm_output_inputbox.text()).resolve()
         output_folder.mkdir(parents=True, exist_ok=True)
         pin_files = list(psm_folder.rglob('*.pin'))
@@ -1022,14 +864,21 @@ class MhcBoosterGUI(QWidget):
             return
 
         # Run params
-        fine_tune = self.ft_checkbox.isChecked()
         auto_pred = self.ap_checkbox.isChecked()
+        pe = self.pe_checkbox.isChecked()
+        fine_tune = self.ft_checkbox.isChecked()
+        infer_protein = self.pi_checkbox.isChecked()
+        remove_contaminant = self.rc_checkbox.isChecked()
+        remove_decoy = self.rd_checkbox.isChecked()
         min_pep_length, max_pep_length = None, None
         if self.pl_checkbox.isChecked():
-            min_pep_length = self.pl_min.value()
-            max_pep_length = self.pl_max.value()
+            min_pep_length = self.pl_min_spinbox.value()
+            max_pep_length = self.pl_max_spinbox.value()
+        psm_fdr = self.psm_fdr_spinbox.value()
+        pep_fdr = self.pep_fdr_spinbox.value()
+        seq_fdr = self.seq_fdr_spinbox.value()
         koina_server_url = self.koina_inputbox.text()
-        n_threads = self.spinbox_thread.value()
+        n_threads = self.thread_spinbox.value()
 
         # App score
         app_predictors = []
@@ -1068,20 +917,12 @@ class MhcBoosterGUI(QWidget):
             if checkbox.isChecked():
                 ccs_predictors.append(checkbox.text())
 
-        # PE
-        pe = False
-        for checkbox in self.checkboxes_pe:
-            if checkbox.isChecked():
-                pe = True
-
         app_predictor_param = ' '.join(app_predictors)
         rt_predictor_param = ' '.join(rt_predictors)
         ms2_predictor_param = ' '.join(ms2_predictors)
         ccs_predictor_param = ' '.join(ccs_predictors)
         cli_path = str(Path(__file__).parent/'mhcbooster_cli.py')
         command = f'python {cli_path} -n {n_threads}'
-        if min_pep_length and max_pep_length:
-            command += f' --min_pep_len {min_pep_length} --max_pep_len {max_pep_length}'
         if len(app_predictor_param) > 0 and len(allele_param) > 0:
             command += f' --app_predictors {app_predictor_param}'
             command += f' --alleles {allele_param}'
@@ -1092,20 +933,37 @@ class MhcBoosterGUI(QWidget):
             command += f' --ms2_predictors {ms2_predictor_param}'
         if len(ccs_predictor_param) > 0:
             command += f' --ccs_predictors {ccs_predictor_param}'
+        if auto_pred:
+            command += f' --auto_pred'
         if pe:
             command += f' --encode_peptide_sequences'
         if fine_tune:
             command += f' --fine_tune'
-        if auto_pred:
-            command += f' --auto_pred'
+        if infer_protein:
+            command += f' --infer_protein'
+        if remove_contaminant:
+            command += f' --remove_contaminant'
+        if remove_decoy:
+            command += f' --remove_decoy'
+        if min_pep_length and max_pep_length:
+            command += f' --min_pep_len {min_pep_length} --max_pep_len {max_pep_length}'
+        if psm_fdr is not None:
+            command += f' --psm_fdr {psm_fdr}'
+        if pep_fdr is not None:
+            command += f' --pep_fdr {pep_fdr}'
+        if seq_fdr is not None:
+            command += f' --seq_fdr {seq_fdr}'
         if len(koina_server_url) > 0:
             command += f' --koina_server_url {koina_server_url}'
         command += f' --input {psm_folder} --output_dir {output_folder}'
+        if len(fasta_path) > 0:
+            command += f' --fasta_path {fasta_path}'
         if len(mzml_folder) > 0:
             command += f' --mzml_dir {mzml_folder}'
-
-        self.worker_thread.commands = [command]
-        self.worker_start()
+        print(command)
+        commands.append(command)
+        self.worker_thread.commands = commands
+        # self.worker_start()
 
 
     def add_log(self, message):
@@ -1116,6 +974,121 @@ class MhcBoosterGUI(QWidget):
         self.log_output.append(message)
         self.log_output.moveCursor(QTextCursor.End)
         self.log_output.ensureCursorVisible()
+
+    def save_settings(self):
+        settings = QSettings('MHCBooster')
+
+        settings.setValue('psm_radiobutton', self.psm_radiobutton.isChecked())
+        settings.setValue('psm_inputbox', self.psm_inputbox.text())
+        settings.setValue('psm_fasta_inputbox', self.psm_fasta_inputbox.text())
+        settings.setValue('psm_mzml_inputbox', self.psm_mzml_inputbox.text())
+        settings.setValue('psm_output_inputbox', self.psm_output_inputbox.text())
+
+        settings.setValue('raw_radiobutton', self.raw_radiobutton.isChecked())
+        settings.setValue('raw_inputbox', self.raw_inputbox.text())
+        settings.setValue('raw_fasta_inputbox', self.raw_fasta_inputbox.text())
+        settings.setValue('raw_param_inputbox', self.raw_param_inputbox.text())
+        settings.setValue('raw_output_inputbox', self.raw_output_inputbox.text())
+
+        mhc_I_params = []
+        for checkbox in self.checkboxes_mhc_I:
+            if checkbox.isChecked():
+                mhc_I_params.append(checkbox.text())
+        settings.setValue('checkboxes_mhc_I', mhc_I_params)
+        mhc_II_params = []
+        for checkbox in self.checkboxes_mhc_II:
+            if checkbox.isChecked():
+                mhc_II_params.append(checkbox.text())
+        settings.setValue('checkboxes_mhc_II', mhc_II_params)
+        settings.setValue('allele_inputbox', self.allele_inputbox.text())
+
+        settings.setValue('ap_checkbox', self.ap_checkbox.isChecked())
+        rt_params = []
+        for checkbox in self.checkboxes_rt:
+            if checkbox.isChecked():
+                rt_params.append(checkbox.text())
+        settings.setValue('checkboxes_rt', rt_params)
+        ms2_params = []
+        for checkbox in self.checkboxes_ms2:
+            if not isinstance(checkbox, QCheckBox):
+                continue
+            if checkbox.isChecked():
+                ms2_params.append(checkbox.text())
+        settings.setValue('checkboxes_ms2', ms2_params)
+        ccs_params = []
+        for checkbox in self.checkboxes_ccs:
+            if checkbox.isChecked():
+                ccs_params.append(checkbox.text())
+        settings.setValue('checkboxes_ccs', ccs_params)
+
+        settings.setValue('pe_checkbox', self.pe_checkbox.isChecked())
+        settings.setValue('ft_checkbox', self.ft_checkbox.isChecked())
+        settings.setValue('pi_checkbox', self.pi_checkbox.isChecked())
+        settings.setValue('rd_checkbox', self.rd_checkbox.isChecked())
+        settings.setValue('rc_checkbox', self.rc_checkbox.isChecked())
+        settings.setValue('pl_checkbox', self.pl_checkbox.isChecked())
+        settings.setValue('pl_min_spinbox', self.pl_min_spinbox.value())
+        settings.setValue('pl_max_spinbox', self.pl_max_spinbox.value())
+        settings.setValue('psm_fdr_spinbox', self.psm_fdr_spinbox.value())
+        settings.setValue('pep_fdr_spinbox', self.pep_fdr_spinbox.value())
+        settings.setValue('seq_fdr_spinbox', self.seq_fdr_spinbox.value())
+        settings.setValue('koina_inputbox', self.koina_inputbox.text())
+        settings.setValue('thread_spinbox', self.thread_spinbox.value())
+                
+    def restore_settings(self):
+        settings = QSettings('MHCBooster')
+        # return
+        if settings.value('psm_radiobutton') is None:
+            return
+        self.psm_radiobutton.setChecked(settings.value('psm_radiobutton') == 'true')
+        self.psm_inputbox.setText(settings.value('psm_inputbox'))
+        self.psm_fasta_inputbox.setText(settings.value('psm_fasta_inputbox'))
+        self.psm_mzml_inputbox.setText(settings.value('psm_mzml_inputbox'))
+        self.psm_output_inputbox.setText(settings.value('psm_output_inputbox'))
+
+        self.raw_radiobutton.setChecked(settings.value('raw_radiobutton') == 'true')
+        self.raw_inputbox.setText(settings.value('raw_inputbox'))
+        self.raw_fasta_inputbox.setText(settings.value('raw_fasta_inputbox'))
+        self.raw_param_inputbox.setText(settings.value('raw_param_inputbox'))
+        self.raw_output_inputbox.setText(settings.value('raw_output_inputbox'))
+
+        if settings.value('checkboxes_mhc_I') is not None:
+            for checkbox in self.checkboxes_mhc_I:
+                if checkbox.text() in settings.value('checkboxes_mhc_I'):
+                    checkbox.setChecked(True)
+        if settings.value('checkboxes_mhc_II') is not None:
+            for checkbox in self.checkboxes_mhc_II:
+                if checkbox.text() in settings.value('checkboxes_mhc_II'):
+                    checkbox.setChecked(True)
+        self.allele_inputbox.setText(settings.value('allele_inputbox'))
+
+        self.ap_checkbox.setChecked(settings.value('ap_checkbox') == 'true')
+        if settings.value('checkboxes_rt') is not None:
+            for checkbox in self.checkboxes_rt:
+                if checkbox.text() in settings.value('checkboxes_rt'):
+                    checkbox.setChecked(True)
+        if settings.value('checkboxes_ms2') is not None:
+            for checkbox in self.checkboxes_ms2:
+                if isinstance(checkbox, QCheckBox) and checkbox.text() in settings.value('checkboxes_ms2'):
+                    checkbox.setChecked(True)
+        if settings.value('checkboxes_ccs') is not None:
+            for checkbox in self.checkboxes_ccs:
+                if checkbox.text() in settings.value('checkboxes_ccs'):
+                    checkbox.setChecked(True)
+
+        self.pe_checkbox.setChecked(settings.value('pe_checkbox') == 'true')
+        self.ft_checkbox.setChecked(settings.value('ft_checkbox') == 'true')
+        self.pi_checkbox.setChecked(settings.value('pi_checkbox') == 'true')
+        self.rd_checkbox.setChecked(settings.value('rd_checkbox') == 'true')
+        self.rc_checkbox.setChecked(settings.value('rc_checkbox') == 'true')
+        self.pl_checkbox.setChecked(settings.value('pl_checkbox') == 'true')
+        self.pl_min_spinbox.setValue(int(settings.value('pl_min_spinbox')))
+        self.pl_max_spinbox.setValue(int(settings.value('pl_max_spinbox')))
+        self.psm_fdr_spinbox.setValue(float(settings.value('psm_fdr_spinbox')))
+        self.pep_fdr_spinbox.setValue(float(settings.value('pep_fdr_spinbox')))
+        self.seq_fdr_spinbox.setValue(float(settings.value('seq_fdr_spinbox')))
+        self.koina_inputbox.setText(settings.value('koina_inputbox'))
+        self.thread_spinbox.setValue(int(settings.value('thread_spinbox')))
 
 
 class MhcBoosterWorker(QThread):
@@ -1133,22 +1106,27 @@ class MhcBoosterWorker(QThread):
             if self._stop_flag:
                 break
 
-            self.process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+            self.process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
             while True:
                 if self._stop_flag:
-                    self.process.terminate()  # Try to terminate the process gracefully
-                    self.message.emit("Stopped gracefully...")
+                    parent_process = psutil.Process(self.process.pid)
+                    child_process = parent_process.children(recursive=True)
+                    self.message.emit(f'Terminating {len(child_process)} child processes...')
+                    for child in child_process:
+                        child.terminate()
+                    self.message.emit(f'Terminating MHCBooster main process...')
+                    self.process.terminate()
                     try:
-                        self.process.wait(timeout=2) # Wait a bit to allow graceful termination
+                        self.process.wait(timeout=1) # Wait a bit to allow graceful termination
+                        self.message.emit("Terminated gracefully.")
                     except subprocess.TimeoutExpired:
-                        self.message.emit("Process didn't terminate in time, forcing kill...")
                         self.process.kill()
+                        self.message.emit("Process didn't terminate in time, forcibly killed.")
                     break
 
-                    # Read output of the subprocess if needed
                 stdout_line = self.process.stdout.readline()
                 if stdout_line:
-                    msg = stdout_line.decode('utf-8').strip()
+                    msg = stdout_line.strip()
                     self.message.emit(msg)
 
                 if not stdout_line:
@@ -1162,10 +1140,13 @@ class MhcBoosterWorker(QThread):
     def stop(self):
         self._stop_flag = True
         self.quit()  # Quit the QThread event loop
-        # self.wait()  # Wait for the thread to finish
+        self.wait()  # Wait for the thread to finish
 
 def run():
     app = QApplication(sys.argv)
+    font = QFont('Arial')
+    font.setPointSizeF(8.8)
+    app.setFont(font)
     gui = MhcBoosterGUI()
     gui.show()
 
