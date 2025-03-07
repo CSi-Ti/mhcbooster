@@ -7,7 +7,7 @@ from pathlib import Path
 
 from future.moves import sys
 
-target_folder = Path(__file__).parent.parent.parent/'third_party'
+target_folder = Path(__file__).parent.parent/'third_party'
 target_folder.mkdir(parents=True, exist_ok=True)
 
 
@@ -16,8 +16,8 @@ def install_msfragger(path):
     with zipfile.ZipFile(path, 'r') as zip_ref:
         zip_ref.extractall(target_folder)
         print('MSFragger installed to {}'.format(target_folder))
-    with zipfile.ZipFile(target_folder / 'jre-17.0.14.zip', 'r') as zip_ref:
-        zip_ref.extractall(target_folder)
+    with tarfile.open(target_folder / 'jre-17.0.14.tar.gz', 'r:gz') as tar:
+        tar.extractall(target_folder)
         print('Java runtime environment installed to {}'.format(target_folder))
 
 

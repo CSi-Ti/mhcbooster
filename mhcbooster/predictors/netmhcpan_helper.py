@@ -20,8 +20,8 @@ from mhcbooster.utils.constants import EPSILON
 from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
 
 TMP_DIR = str(Path(tempfile.gettempdir(), 'pynetmhcpan').expanduser())
-NETMHCPAN = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + '/third_party/netMHCpan-4.1/netMHCpan'
-NETMHCIIPAN = os.path.dirname(os.path.dirname(os.path.dirname(__file__))) + '/third_party/netMHCIIpan-4.3/netMHCIIpan'
+NETMHCPAN = Path(__file__).parent.parent / 'third_party' / 'netMHCpan-4.1' / 'netMHCpan'
+NETMHCIIPAN = Path(__file__).parent.parent / 'third_party' / 'netMHCIIpan-4.3' / 'netMHCIIpan'
 
 
 class NetMHCpanHelper(BasePredictorHelper):
@@ -89,7 +89,7 @@ class NetMHCpanHelper(BasePredictorHelper):
         self.predictions = {pep: {} for pep in self.peptides}
 
     def _format_class_I_alleles(self, alleles: List[str]):
-        avail_allele_path = Path(__file__).parent.parent.parent/'third_party'/'netMHCpan-4.1'/'Linux_x86_64'/'data'/'MHC_pseudo.dat'
+        avail_allele_path = Path(__file__).parent.parent/'third_party'/'netMHCpan-4.1'/'Linux_x86_64'/'data'/'MHC_pseudo.dat'
         avail_alleles = [line.split()[0].replace(':', '') for line in open(avail_allele_path).readlines()]
 
         avail_alleles = [mhcgnomes.parse(allele).to_string() for allele in avail_alleles]
@@ -97,7 +97,7 @@ class NetMHCpanHelper(BasePredictorHelper):
         return [a.replace('*', '').replace(':', '') for a in std_alleles]
 
     def _format_class_II_alleles(self, alleles: List[str]):
-        avail_allele_path = Path(__file__).parent.parent.parent/'third_party'/'netMHCIIpan-4.3'/'data'/'pseudosequence.2023.all.X.dat'
+        avail_allele_path = Path(__file__).parent.parent/'third_party'/'netMHCIIpan-4.3'/'data'/'pseudosequence.2023.all.X.dat'
         avail_alleles = [line.split()[0].replace('_', '') for line in open(avail_allele_path).readlines()]
         paired_alleles = prepare_class_II_alleles(alleles, avail_alleles)
         for i in range(len(paired_alleles)):

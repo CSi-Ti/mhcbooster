@@ -25,7 +25,7 @@ class AutortHelper(BasePredictorHelper):
         super().__init__('AutoRT', report_directory)
 
         self.autort_url = 'https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip'
-        self.autort_root = Path(__file__).parent.parent.parent / 'third_party' / 'AutoRT-master'
+        self.autort_root = Path(__file__).parent.parent / 'third_party' / 'AutoRT-master'
         if not self.autort_root.exists():
             self._fetch_autort_by_url()
 

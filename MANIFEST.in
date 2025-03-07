@@ -1,5 +1,5 @@
 include README.md
 include mhcbooster/interface/*.png
-include third_party/philosopher_v5.1.0_linux_amd64/*
-include third_party/jre-17.0.14.zip
-include third_party/msfragger_pep_split.py
+include mhcbooster/third_party/philosopher_v5.1.0_linux_amd64/*
+include mhcbooster/third_party/jre-17.0.14.tar.gz
+include mhcbooster/third_party/msfragger_pep_split.py

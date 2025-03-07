@@ -24,7 +24,7 @@ class BigMhcHelper(BasePredictorHelper):
         super().__init__('BigMHC', report_directory)
 
         self.bigmhc_url = 'https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip'
-        self.bigmhc_root = Path(__file__).parent.parent.parent / 'third_party' / 'bigmhc-master'
+        self.bigmhc_root = Path(__file__).parent.parent / 'third_party' / 'bigmhc-master'
         if not self.bigmhc_root.exists():
             self._fetch_bigmhc_by_url()
 
@@ -35,7 +35,7 @@ class BigMhcHelper(BasePredictorHelper):
 
         self.peptides = peptides
         self.alleles = self._format_class_I_alleles(alleles)
-        self.bigmhc_exe_path = Path(__file__).parent.parent.parent / 'third_party' / 'bigmhc-master' / 'src' / 'predict.py'
+        self.bigmhc_exe_path = Path(__file__).parent.parent / 'third_party' / 'bigmhc-master' / 'src' / 'predict.py'
 
     def _fetch_bigmhc_by_url(self):
         # Fetch BigMHC from GitHub

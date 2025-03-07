@@ -88,7 +88,7 @@ class CombinedReporter:
         with tempfile.NamedTemporaryFile('w') as pep_xml_list:
             pep_xml_list.write('\n'.join(pep_xml_paths))
             pep_xml_list.flush()
-            philosopher_exe_path = Path(__file__).parent.parent.parent / 'third_party' / 'philosopher_v5.1.0_linux_amd64' / 'philosopher'
+            philosopher_exe_path = Path(__file__).parent.parent / 'third_party' / 'philosopher_v5.1.0_linux_amd64' / 'philosopher'
             subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=self.result_folder, shell=True)
             subprocess.run(f'{philosopher_exe_path} proteinprophet --maxppmdiff 2000000 --output combined {pep_xml_list.name}', cwd=self.result_folder, shell=True)
             subprocess.run(f'{philosopher_exe_path} workspace --clean --nocheck', cwd=self.result_folder, shell=True)

@@ -10,7 +10,7 @@ path = Path(__file__)
 print(path)
 print(path.parent.parent.parent)
 autort_url = 'https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip'
-autort_root = Path(__file__).parent.parent.parent / 'third_party' / 'AutoRT-master'
+autort_root = Path(__file__).parent.parent / 'third_party' / 'AutoRT-master'
 third_party_root = autort_root.parent
 
 print('Start to download AutoRT from GitHub. It will take several minutes...')

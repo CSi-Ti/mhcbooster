@@ -789,7 +789,7 @@ class MhcBoosterGUI(QWidget):
         self.progress_bar.setVisible(False)
 
     def refresh_third_party_status(self):
-        third_party_folder = Path(__file__).parent.parent.parent/'third_party'
+        third_party_folder = Path(__file__).parent.parent/'third_party'
         for path in third_party_folder.iterdir():
             if 'AutoRT' in path.name:
                 self.autort_inputbox.setText(str(path))
@@ -818,9 +818,9 @@ class MhcBoosterGUI(QWidget):
 
         commands = []
         if self.raw_radiobutton.isChecked():
-            java_exe_path = Path(__file__).parent.parent.parent/'third_party'/'jre-17.0.14'/'bin'/'java'
-            msfragger_exe_path = Path(__file__).parent.parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
-            msfragger_split_path = Path(__file__).parent.parent.parent/'third_party'/'msfragger_pep_split.py'
+            java_exe_path = Path(__file__).parent.parent/'third_party'/'jre-17.0.14'/'bin'/'java'
+            msfragger_exe_path = Path(__file__).parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
+            msfragger_split_path = Path(__file__).parent.parent/'third_party'/'msfragger_pep_split.py'
             avail_mem = psutil.virtual_memory().available / (1024 ** 3)
             fasta_size =  Path(self.raw_fasta_inputbox.text()).stat().st_size / (1024 ** 2)
             split = int(fasta_size / avail_mem * 8)
@@ -859,7 +859,7 @@ class MhcBoosterGUI(QWidget):
         output_folder = Path(self.psm_output_inputbox.text()).resolve()
         output_folder.mkdir(parents=True, exist_ok=True)
         pin_files = list(psm_folder.rglob('*.pin'))
-        if len(pin_files) == 0:
+        if len(pin_files) == 0 and len(commands) == 0:
             self.show_message('No pin files found')
             return
 

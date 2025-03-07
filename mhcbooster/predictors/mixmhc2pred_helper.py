@@ -27,10 +27,10 @@ class MixMhc2PredHelper(BasePredictorHelper):
 
         self.peptides = peptides
         self.alleles = self._format_class_II_alleles(alleles)
-        self.mixmhc2pred_exe_path = Path(__file__).parent.parent.parent/'third_party'/'MixMHC2pred-2.0'/'MixMHC2pred_unix'
+        self.mixmhc2pred_exe_path = Path(__file__).parent.parent/'third_party'/'MixMHC2pred-2.0'/'MixMHC2pred_unix'
 
     def _format_class_II_alleles(self, alleles: List[str]):
-        avail_allele_path = Path(__file__).parent.parent.parent/'third_party'/'MixMHC2pred-2.0'/'PWMdef'/'Alleles_list_Human.txt'
+        avail_allele_path = Path(__file__).parent.parent/'third_party'/'MixMHC2pred-2.0'/'PWMdef'/'Alleles_list_Human.txt'
         avail_alleles = [line.split()[0].replace('__', '-').replace('_', '') \
                          for line in open(avail_allele_path).readlines() if line.startswith('D')]
         paired_alleles = prepare_class_II_alleles(alleles, avail_alleles)

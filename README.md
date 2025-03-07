@@ -20,6 +20,13 @@ conda create -n mhcbooster python==3.10
 
 # install MHCBooster
 pip install mhcbooster
+
+
+# WSL
+sudo apt update
+sudo apt install libxcb-xinerama0 libxcb-cursor0 libx11-xcb1 qt5-qmake qtbase5-dev qtchooser qtbase5-dev-tools 
+sudo apt install tcsh    # NetMHCpan env
+mhcflurry-downloads fetch models_class1_presentation    # MHCflurry env
 ```
 
 ### Install third party tools
