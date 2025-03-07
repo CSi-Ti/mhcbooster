@@ -1052,6 +1052,11 @@ class MhcBoosterGUI(QWidget):
         self.raw_param_inputbox.setText(settings.value('raw_param_inputbox'))
         self.raw_output_inputbox.setText(settings.value('raw_output_inputbox'))
 
+        if self.psm_radiobutton.isChecked():
+            self.input_stacked_widget.setCurrentIndex(0)
+        else:
+            self.input_stacked_widget.setCurrentIndex(1)
+
         if settings.value('checkboxes_mhc_I') is not None:
             for checkbox in self.checkboxes_mhc_I:
                 if checkbox.text() in settings.value('checkboxes_mhc_I'):
@@ -1063,6 +1068,7 @@ class MhcBoosterGUI(QWidget):
         self.allele_inputbox.setText(settings.value('allele_inputbox'))
 
         self.ap_checkbox.setChecked(settings.value('ap_checkbox') == 'true')
+        self.on_autopred_checkbox_toggled(self.ap_checkbox.isChecked())
         if settings.value('checkboxes_rt') is not None:
             for checkbox in self.checkboxes_rt:
                 if checkbox.text() in settings.value('checkboxes_rt'):
