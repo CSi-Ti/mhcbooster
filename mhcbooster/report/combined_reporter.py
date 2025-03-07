@@ -255,13 +255,14 @@ class CombinedReporter:
 
 
     def remove_contaminants(self, file_name):
-        contam_fasta = fasta.read(Path(__file__).parent / 'contaminant.fasta.fas')
+        contam_fasta = fasta.read(str(Path(__file__).parent / 'contaminant.fasta.fas'))
         contam_proteins = [p.description.split(' ')[0] for p in contam_fasta]
         for result_path in self.result_folder.rglob(file_name):
-            print(f'Removing contaminants in {result_path.parent.name} {result_path.name}')
+            print(f'Removing contaminants in {result_path.parent.name} {result_path.name}', end='\t')
             result_df = pd.read_csv(result_path, sep='\t')
-            result_df = result_df[-result_df['protein'].isin(contam_proteins)]
-            result_df.to_csv(result_path, sep='\t', index=False)
+            result_df_wo_contam = result_df[-result_df['protein'].isin(contam_proteins)]
+            print(f'{len(result_df) - len(result_df_wo_contam)} {file_name.split(".")[0]}s removed.')
+            result_df_wo_contam.to_csv(result_path, sep='\t', index=False)
 
 
     def combine_result(self, file_name):
@@ -343,6 +344,8 @@ class CombinedReporter:
 
 
 if __name__ == '__main__':
-    combined_reporter = CombinedReporter(result_folder='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0307',
-                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta')
+    combined_reporter = CombinedReporter(result_folder='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0307_copy',
+                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta',
+                                         infer_protein=False,
+                                         remove_contaminant=True)
     combined_reporter.run()
