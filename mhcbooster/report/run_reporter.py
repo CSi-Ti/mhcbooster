@@ -7,7 +7,7 @@ from pathlib import Path
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 from matplotlib.cm import get_cmap
-from src.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
+from mhcbooster.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 from mhcnames import normalize_allele_name
 
 class RunReporter:
@@ -218,12 +218,15 @@ if __name__ == '__main__':
     psm_df = pd.read_csv('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552/psm.tsv', sep='\t')
     run_reporter = RunReporter(report_directory='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552',
                                file_name='test', decoy_prefix='rev_')
+    psm_df = pd.read_csv('/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0305/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster/psm.tsv', sep='\t')
+    run_reporter = RunReporter(report_directory='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0306/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster',
+                               file_name='test', decoy_prefix='rev_')
     # psm_df['protein_id'] = ''
     # psm_df['entry_name'] = ''
     # psm_df['protein_description'] = ''
     # psm_df['mapped_protein'] = ''
     run_reporter.psm_df = psm_df
-    # run_reporter.add_app_score()
+    run_reporter.add_app_score()
     # run_reporter.infer_protein('/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas')
     # run_reporter.generate_psm_report()
     run_reporter.generate_peptide_report()

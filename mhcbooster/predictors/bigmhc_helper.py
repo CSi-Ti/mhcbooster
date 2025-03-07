@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import List
 from tqdm import tqdm
 from mhcnames import normalize_allele_name
-from src.utils.constants import EPSILON
-from src.predictors.base_predictor_helper import BasePredictorHelper
+from mhcbooster.utils.constants import EPSILON
+from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class BigMhcHelper(BasePredictorHelper):

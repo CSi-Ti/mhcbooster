@@ -1,10 +1,11 @@
 import os
 import matplotlib.pyplot as plt
+import numba
 import numpy as np
 import pandas as pd
 
-from src.utils.constants import EPSILON
-from src.utils.spectrum import match_spectra, calc_spectral_entropy, calc_forward_reverse, calc_cosine_similarity, \
+from mhcbooster.utils.constants import EPSILON
+from mhcbooster.utils.spectrum import calc_all_ms2_scores, calc_spectral_entropy, calc_forward_reverse, calc_cosine_similarity, \
     match_spectra_to_pred, remove_low_intensity_signal
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from sklearn.linear_model import RANSACRegressor
@@ -48,42 +49,28 @@ class BasePredictorHelper:
 
     def calc_ms2_scores(self, exp_spectra_df: pd.DataFrame, pred_spectra_df: pd.DataFrame,
                         mz_tolerance: float, use_ppm: bool, predictor_name: str = None) -> pd.DataFrame:
+        from numba.typed import List
         assert len(exp_spectra_df) == len(pred_spectra_df)
+        exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr = List(), List(), List(), List()
+        exp_mzs_arr.extend([np.array(mzs, dtype=np.float32) for mzs in exp_spectra_df['mzs']])
+        exp_ints_arr.extend([np.array(ints, dtype=np.float32) for ints in exp_spectra_df['intensities']])
+        pred_mzs_arr.extend([np.array(mzs, dtype=np.float32) for mzs in pred_spectra_df['mzs']])
+        pred_ints_arr.extend([np.array(ints, dtype=np.float32) for ints in pred_spectra_df['intensities']])
+
+        entropy_scores, cosine_scores, forward_scores, reverse_scores = (
+            calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, mz_tolerance, use_ppm))
+
+        predictions = pd.DataFrame()
         if predictor_name is None:
-            predictions = pd.DataFrame(columns=[f'{self.predictor_name}_entropy_score',
-                                                f'{self.predictor_name}_cosine_score',
-                                                f'{self.predictor_name}_forward_score',
-                                                f'{self.predictor_name}_reverse_score'])
+            predictions[f'{self.predictor_name}_entropy_score'] = entropy_scores
+            predictions[f'{self.predictor_name}_cosine_score'] = cosine_scores
+            predictions[f'{self.predictor_name}_forward_score'] = forward_scores
+            predictions[f'{self.predictor_name}_reverse_score'] = reverse_scores
         else:
-            predictions = pd.DataFrame(columns=[f'{predictor_name}_entropy_score',
-                                                f'{predictor_name}_cosine_score',
-                                                f'{predictor_name}_forward_score',
-                                                f'{predictor_name}_reverse_score'])
-        for i in range(len(exp_spectra_df)):
-            exp_spectrum = exp_spectra_df.iloc[i]
-            pred_spectrum = pred_spectra_df.iloc[i]
-            exp_mzs = np.array(exp_spectrum.mzs, dtype=np.float32)
-            exp_ints = np.array(exp_spectrum.intensities, dtype=np.float32)
-            pred_mzs = np.array(pred_spectrum.mzs, dtype=np.float32)
-            pred_ints = np.array(pred_spectrum.intensities, dtype=np.float32)
-
-            exp_indices = np.argsort(exp_mzs)
-            exp_mzs = exp_mzs[exp_indices]
-            exp_ints = exp_ints[exp_indices]
-
-            pred_mzs, pred_ints = remove_low_intensity_signal(pred_mzs, pred_ints, rel_thresh=0.01)
-            pred_indices = np.argsort(pred_mzs)
-            pred_mzs = pred_mzs[pred_indices]
-            pred_ints = pred_ints[pred_indices]
-
-            matched_exp_ints = match_spectra_to_pred(exp_mzs, exp_ints, pred_mzs, mz_tolerance, use_ppm)
-            entropy_score = calc_spectral_entropy(matched_exp_ints, pred_ints)
-            cosine_score = calc_cosine_similarity(matched_exp_ints, pred_ints)
-
-            n_matched = np.sum(matched_exp_ints > 0)
-            forward_score, reverse_score = calc_forward_reverse(len(exp_mzs), len(pred_mzs), n_matched)
-            predictions.loc[i] = np.clip([entropy_score, cosine_score, forward_score, reverse_score],
-                                         a_min=EPSILON, a_max=None)
+            predictions[f'{predictor_name}_entropy_score'] = entropy_scores
+            predictions[f'{predictor_name}_cosine_score'] = cosine_scores
+            predictions[f'{predictor_name}_forward_score'] = forward_scores
+            predictions[f'{predictor_name}_reverse_score'] = reverse_scores
         return predictions
 
     def calc_ms2_scores_combine(self, exp_spectra_df: pd.DataFrame, pred_spectra_df: pd.DataFrame,
@@ -134,24 +121,44 @@ class BasePredictorHelper:
         return predictions
 
     def align_pred_to_exp(self, pred_array: np.ndarray, exp_array: np.ndarray, full_pred_array: np.ndarray = None, figure_name: str = None):
-        frac = max(0.2, 0.7/np.log10(len(pred_array)))
-        monotonic = False
-        iter = 0
-        while not monotonic and iter < 5 and frac <= 1:
-            aligned_pred_array = lowess(exp_array, pred_array, frac=frac, it=10, return_sorted=False)
+        # Remove far noises
+        min_exp, max_exp = np.min(exp_array), np.max(exp_array)
+        min_pred, max_pred = np.min(pred_array), np.max(pred_array)
+        if min_exp == max_exp or min_pred == max_pred:
+            return pred_array if full_pred_array is None else full_pred_array
+        k_1, b_1 = (max_exp - min_exp) / (max_pred - min_pred), (max_exp + min_exp) / 3
+        k_2, b_2 = (max_exp - min_exp) / (max_pred - min_pred), -(max_exp + min_exp) / 3
+        below_1 = exp_array <= (pred_array * k_1 + b_1)
+        above_2 = exp_array >= (pred_array * k_2 + b_2)
+        mask = below_1 * above_2
+        pred_array = pred_array[mask]
+        exp_array = exp_array[mask]
+
+        if len(pred_array) < 200:
+            poly_func = np.poly1d(np.polyfit(pred_array, exp_array, 2))
+            aligned_pred_array = poly_func(pred_array)
             sorted_pred_array = aligned_pred_array[np.argsort(pred_array)]
             monotonic = np.all(sorted_pred_array[:-1] <= sorted_pred_array[1:])
             if not monotonic:
-                frac = frac * 1.5
-            iter += 1
-        if not monotonic or frac > 1:
-            linear_model = RANSACRegressor()
-            linear_model.fit(pred_array.reshape(-1, 1), exp_array)
-            aligned_pred_array = linear_model.predict(pred_array.reshape(-1, 1))
-            sorted_pred_array = aligned_pred_array[np.argsort(pred_array)]
-            monotonic = np.all(sorted_pred_array[:-1] <= sorted_pred_array[1:])
-            if not monotonic:
-                return self.align_pred_to_exp(pred_array, exp_array, full_pred_array, figure_name)
+                return self.align_pred_to_exp_coarse(pred_array, exp_array, full_pred_array, figure_name)
+        else:
+            frac = max(0.2, 0.7/np.log10(len(pred_array)))
+            monotonic = False
+            iter = 0
+            while not monotonic and iter < 5 and frac <= 1:
+                aligned_pred_array = lowess(exp_array, pred_array, frac=frac, it=5, return_sorted=False)
+                sorted_pred_array = aligned_pred_array[np.argsort(pred_array)]
+                monotonic = np.all(sorted_pred_array[:-1] <= sorted_pred_array[1:])
+                if not monotonic:
+                    frac = frac * 1.5
+                iter += 1
+            if not monotonic or frac > 1:
+                poly_func = np.poly1d(np.polyfit(pred_array, exp_array, 2))
+                aligned_pred_array = poly_func(pred_array)
+                sorted_pred_array = aligned_pred_array[np.argsort(pred_array)]
+                monotonic = np.all(sorted_pred_array[:-1] <= sorted_pred_array[1:])
+                if not monotonic:
+                    return self.align_pred_to_exp_coarse(pred_array, exp_array, full_pred_array, figure_name)
 
         alignment_repository = os.path.join(self.report_directory, 'alignment')
         os.makedirs(alignment_repository, exist_ok=True)
@@ -193,7 +200,6 @@ class BasePredictorHelper:
 
         return full_aligned_pred_array
 
-        return aligned_pred_array
 
     def draw_prediction_distributions(self, predictions, label):
         fig_repository = os.path.join(self.report_directory, 'score_distribution')

@@ -7,9 +7,9 @@ from pathlib import Path
 
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from src import __version__
-from src.main_mhcbooster import MHCBooster
-from src.report.combined_reporter import CombinedReporter
+from mhcbooster import __version__
+from mhcbooster.main_mhcbooster import MHCBooster
+from mhcbooster.report.combined_reporter import CombinedReporter
 
 
 description = f"""
@@ -241,8 +241,6 @@ def run():
 
     for input_file in input_files:
         print(f'Processing: {input_file}')
-        if input_file.stem == 'JY_500M_ClassI_F1_DDA_25cm_R3_Slot1-3_1_614':
-            continue
 
         if args.output_dir is None:
             args.output_dir = Path(input_file).parent

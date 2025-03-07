@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 from pyteomics import pepxml, mzid, tandem
 from os import PathLike
-from src.utils.constants import COMMON_AA
-from src.utils.peptide import clean_peptide_sequences
+from mhcbooster.utils.constants import COMMON_AA
+from mhcbooster.utils.peptide import clean_peptide_sequences
 
 sep_tag = '@@'
 

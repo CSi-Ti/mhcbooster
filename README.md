@@ -1,98 +1,104 @@
 [![DOI](https://zenodo.org/badge/375429185.svg)](https://zenodo.org/doi/10.5281/zenodo.13736548)
-# mhc-validator
-Mhc-validator is a machine learning software tool that is used for the validation of peptide-spectrum matches from mass spectrometry-based immunopeptidomics experiments. Mhc-validator integrates both database search metrics and MHC interaction/presentation predictors into the discriminant function.
+# MHCBooster
+Immunopeptide identification in data-dependent acquisition (DDA) is crucial for
+understanding immune responses and developing targeted therapies.
+However, enhancing both the quantity and quality of identified epitopes,
+particularly from low-input samples, presents a significant challenge.
+To address this, we developed MHCBooster,
+an AI-powered tool that leverages deep learning models to enhance immunopeptide identification.
+By providing reliability measurements across key dimensions like retention time (RT), MS2, ion mobility (IM),
+and antigen processing and presentation (APP) for both MHC-I and MHC-II peptides,
+MHCBooster increases the sensitivity and specificity in epitope identifications,
+especially in lower-input scenarios.
+MHCBooster features a graphical user interface and is also available via command line or as a Python package. 
 
-### Installing mhc-validator
-
-Note: To run mhc-validator, it is recommended to use the comet search engine to create .pin files for mhc-validator. How to setup the analysis pipeline from A-Z is described on the wiki page (https://github.com/CaronLab/mhc-validator/wiki) together with a lay-term description of mhc-validator. If you already know how to use the comet database search engine and/or create your own percolator input files (.pin files), please jump right to the instructions below explaining how to install mhc-validator: 
-
-
-On your Linux machine, create a virtual environment with the python IDE (Integrated Develoment Enviroment) of your choice. In this example PyCharm with python 3.10 was used. Then you can clone MHcvalidator from the CaronLab github page, install required packages and MHCvalidator as follows:
-
-```python
-## in your virtual environment terminal console run
-git clone https://github.com/CaronLab/mhc-validator
-pip install -r mhc-validator/requirements.txt
-pip install ./mhc-validator
-```
-The above should install MHCvalidator and the installation should not take more than 10 minutes, depending on your internet connection it could take longer to pull the folder. 
-Now in order to fully use MHCvalidator's capacity to implement MHC binding affinities you will have to manually install NetMHCpan4.1 on your machine. You can run MHCvalidator without it by using only MHCflurry (which was installed from the requirements.txt), but as described in our publication we suggest to also use NetMHCpan4.1 to achieve the full potential of MHCvalidator. 
-To install NetMHCpan4.1, you have to go to 'https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux' and download NetMHCpan4.1 for Linux (Version 4.1b) as described on the website. A general overview of  NetMHCpan4.1 can be found here: 'https://services.healthtech.dtu.dk/services/NetMHCpan-4.1/'. 
-
-After downloading NetMHCpan4.1, install the software as instructed in the readme file provided in the NetMHCpan4.1 download folder. When installed and tested on your local machine, copy the 'netMHCpan' file to the following folder: ./YOUR_MHCvalidator_FOLDER/venv/bin , for example you can do as follows:
+### Install MHCBooster
 
 ```terminal
-cp ./NetMHCpan4.1_directory/netMHCpan ./PATH/TO/YOUR_MHCvalidator_FOLDER/venv/bin
+# create a conda environment for MHCBooster
+conda create -n mhcbooster python==3.10
+
+# install MHCBooster
+pip install mhcbooster
 ```
-Now MHCvalidator can use NetMHCpan4.1 to make predictions and be used to its full potential.
 
-### Tutorial to use mhc-validator based on an example experiment
+### Install third party tools
+MHCBooster utilizes a variety of tools for RT, MS2, and CCS scoring. 
+Some of these tools are governed by strict licenses and must be manually downloaded and installed.
+**By downloading and installing the third-party packages, you agree to abide by their respective licenses.**
+Third-party tools only need to be installed once.
 
-The first step is to create a new python file (example: mhcvalidator_test.py) in your virtual environment (venv), then set the search parameters and load the input-data (database search results in PIN format). In this example, we use the data provided in the github.com/CaronLab/mhc-validator master branch that you pulled earlier. In other words, you have the data already downloaded and everything should be ready to go!
+#### Install by MHCBooster GUI (preferred)
 
-Note: The example data are from the JY serial dilution experiment (dilution point 3, which is a 4-fold dilution of the original sample) described in our publication ('Integrating Machine Learning-Enhanced Immunopeptidomics and SARS-CoV-2 Population-Scale Analyses Unveils Novel Antigenic Features for Next-Generation COVID-19 Vaccines').
+1. Start GUI
+```terminal
+mhcbooster-gui
+```
+2. Click the **Configuration** tab.
+3. Click the **Download** button to obtain the required tools.
+2. Specify the installation paths by clicking the **Browse** button.
+3. Click the **Install to MHCBooster** button to initiate automatic unzipping and installation.
 
+A progress bar will appear during the installation process. Once the installation is complete,
+the progress bar will disappear, and the tool paths will be updated to their actual installation locations. 
+Each time MHCBooster starts, it will scan the installation folder and display the correct paths in the input box,
+confirming successful installation.
 
-In order to run MHCvalidator in python 3.10 using the example .pin data that you automatically downloaded with the MHCvalidator package, you can do as follows:
+#### Install by command line 
+1. Download the packages manually.
+```text
+# Download links
+MSFragger: https://msfragger-upgrader.nesvilab.org/upgrader/
+AutoRT: https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip
+BigMHC: https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip
+NetMHCpan: https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux
+NetMHCIIpan: https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCIIpan&version=4.3&packageversion=4.3e&platform=Linux
+MixMHC2pred: https://github.com/GfellerLab/MixMHC2pred/releases/download/v2.0.2.2/MixMHC2pred-2.0.zip
+```
+2. Install by scripts
+```terminal
+# Install packages from download folder (WSL/Linux style)
+mhcbooster-package-installer /path/to/folder_of_third_party_zip_files
+```
 
-1. Access example data and import mhc-validator:
+### Run MHCBooster by GUI
+
+1. Start GUI
+```terminal
+mhcbooster-gui
+```
+2. Follow instructions on the GUI page
+
+### Run MHCBooster by command line
+```terminal
+mhcbooster -n 23 --app_predictors NetMHCpan MHCflurry --alleles HLA-A0201 HLA-B0702 HLA-C0702 --mhc_class I \
+ --rt_predictors Prosit_2024_irt_cit --ms2_predictors ms2pip_timsTOF2024 --ccs_predictors IM2Deep \
+ --encode_peptide_sequences --infer_protein --remove_decoy --psm_fdr 0.01 --pep_fdr 0.01 --seq_fdr 0.01 \
+ --koina_server_url koina.wilhelmlab.org:443 --input /path/to/pin_folder --output_dir /path/to/output_folder \
+ --fasta_path /path/to/fasta_with_decoy --mzml_dir /path/to/mzml
+```
+
+### Run MHCBooster by Python API
+
 ```python
-# import requirements
-from mhcvalidator.validator import MhcValidator
 from pathlib import Path
-import os
+from mhcbooster.main_mhcbooster import run_mhcbooster
 
-# Query the sample data from the mhc-validator folder that you pulled from GitHub which contains the data:
-sample_folder = Path(os.getcwd()+f'/mhc-validator')
-pins = [p for p in sample_folder.glob('*.pin') ]
-```
-2. Set alleles:
-```python
-# Set alleles that are applicable to your experiments/data, in our case the following three are applicable:
+pin_files = Path('/path/to/pin_folder').rglob('*.pin')
+mzml_folder = '/path/to/mzml_folder'
+output_folder = '/path/to/output_folder'
+fasta_path = '/path/to/fasta'
+
 alleles = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
+app_predictors = ['mhcflurry', 'netmhcpan']
+
+auto_predict_predictor = True
+rt_predictors = []
+ms2_predictors = []
+ccs_predictors = []
+
+run_mhcbooster(pin_files, sequence_encoding=True, alleles=alleles, mhc_class='I', app_predictors=app_predictors,
+    auto_predict_predictor=auto_predict_predictor, rt_predictors=rt_predictors, ms2_predictors=ms2_predictors,
+    ccs_predictors=ccs_predictors, fine_tune=False, fasta_path=fasta_path, mzml_folder=mzml_folder,
+    output_folder=output_folder)
 ```
-
-3. Run mhc-validator for each pin file seperately, this might take up to 5 minutes for each pin file:
-```python
-for pin in pins:
-    validator = MhcValidator() # Open a MHCvalidator instance, a new one has to be opened for each .pin file
-    validator.load_data(pin) # Load the pin file
-    validator.set_mhc_params(alleles=alleles) # Load the alleles you specified above
-    validator.run(sequence_encoding=True, netmhcpan=True, mhcflurry=True, report_directory=sample_folder / f'{pin.stem}_MhcValidator') #Run MHCvalidator, note that we added all available predictions by setting all configurations to 'True'. You can change these configurations as detailed below if for some reason you want to.
-```
-If you get a warning that your GPU is not connected (CUUDA warning) from MHCflurry, you can simply ignore that wanring since the gain in analysis speed is minimal.
-
-4. Now you should find the results in the mhc-validator folder that you pulled from GitHub. Here you find two seperate folders named after the .pin files you analyzed. The peptide results table that you will be most interested in (.tsv format) is named 'PIN_FILE_NAME.MhcValidator_annotated.tsv'. These peptide results can now be used to study your samples as you normally would. You can also find a .pdf file depicting the training report.
-
-5. You can compare your results to our results which are annotated with the suffix '_default_analysis' for each .pin file.
-
-### Additional information
-
-Note that in step 3. , we used the default configuration that implies MHCflurry and NetMHCpan4.1 predictions. mhc-validator is built to be used with a multitude of configurations which are described below:
-
-```python
-# To run in "MV" configuration (fully connected neural 
-# network with no extra features added to input), do this:
-validator.run()
-
-# To run in "MV+MHC" configuration (fully connected neural network 
-# with NetMHCpan and/or MHCFlurry predictions added to the standard PIN features), do this:
-validator.run(netmhcpan=True, mhcflurry=True)
-
-# To run in MV+PE configuration (convolutional neural network which encodes peptides sequences
-# and then feeds into a fully connected neural network with the standard PIN features), do this:
-validator.run(sequence_encoding=True)
-
-# To run in MV+MHC+PE configuration (same as MV+PE, but also with NetMHCpan and/or MhcFlurry predictions added 
-# to the standard PIN features), do this:
-validator.run(sequence_encoding=True, netmhcpan=True, mhcflurry=True)
-
-# An important argument for the `run` function is "report_directory". Setting this tells MhcValidator to
-# save information about the model fitting as well as the predictions results into this directory
-# For example:
-validator.run(report_directory="/path/to/results/directory")
-```
-### Troubleshooting information
-
-If you get error messages while installing mhc-validator that are related to the version numbers of tensorflow or other packages, please go ahead and install the required package versions that are compatible with each other. We reported few issues with this but installing the suggested versions usually works out fine. Please do not hesitate to contact us via the contact information provided in our publication if you run into more serious issues.
-

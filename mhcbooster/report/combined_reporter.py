@@ -277,48 +277,50 @@ class CombinedReporter:
             group_key = 'sequence'
         print(f'Generating combined {group_key} result to combined_{group_key}.tsv')
 
-        combined_df = pd.DataFrame(columns=common_cols)
-        for result_path in self.result_folder.rglob(file_name):
-
+        result_paths = list(self.result_folder.rglob(file_name))
+        all_dfs = []
+        for result_path in result_paths:
             file_name = Path(result_path).parent.name
             result_df = pd.read_csv(result_path, sep='\t')
             fdr_col = [col for col in result_df.columns if '_qvalue' in col][0]
             result_df = result_df[(result_df['label'] == 'Target') * (result_df[fdr_col] <= fdr)]
-            col_to_drop = ([col for col in ['label', 'score', 'min_rank', fdr_col] if col in result_df.columns] +
-                           [col for col in result_df.columns if '_binder' in col])
-            result_df = result_df.drop(col_to_drop, axis=1)
+
+            cols_to_drop = set(result_df.columns) & {'label', 'score', 'min_rank', fdr_col}
+            cols_to_drop |= {col for col in result_df.columns if '_binder' in col}
+            result_df.drop(columns=cols_to_drop, inplace=True, errors='ignore')
             result_df = result_df.rename(columns={'spectral_count': file_name + '_spectral_count'})
             if 'binder' in result_df.columns:
                 result_df = result_df.rename(columns={'binder': file_name + '_binder'})
                 result_df = result_df.rename(columns={'best_allele': file_name + '_allele'})
-            combined_df = pd.merge(combined_df, result_df, on=common_cols, how='outer', suffixes=('_left', '_right'))
+            all_dfs.append(result_df)
 
-            agg_dict = {
-                'peptide': lambda x: ','.join(sorted(set([p for r in x for p in r.split(',')]))),
-                'sequence': 'first',
-                'prev_AA': lambda x: ','.join(sorted(set([i for s in x for i in s.split(',')]))),
-                'next_AA': lambda x: ','.join(sorted(set([i for s in x for i in s.split(',')]))),
-                'seq_len': 'first',
-                'charge': lambda x: ','.join([str(c) for c in sorted(set([i for s in x for i in s.split(',')]))]),
-                'protein': 'first',
-                'protein_id': 'first',
-                'entry_name': 'first',
-                'gene': 'first',
-                'protein_description': 'first',
-                'mapped_protein': 'first',
-                'mapped_gene': 'first'
-            }
-            agg_dict.pop(group_key)
-            for col in combined_df.columns[13:]:
-                agg_dict[col] = lambda x: x.dropna().iloc[0] if not x.dropna().empty else np.nan
-            combined_df = combined_df.groupby(group_key, as_index=False).agg(agg_dict)
-            binder_cols = [col for col in combined_df.columns if 'binder' in col]
-            allele_cols = [col for col in combined_df.columns if 'allele' in col]
-            spectral_count_cols = [col for col in combined_df.columns if 'spectral_count' in col]
-            for col in spectral_count_cols:
-                combined_df[col] = combined_df[col].astype('Int64')
-            cols = list(combined_df.columns[:13]) + spectral_count_cols + binder_cols + allele_cols
-            combined_df = combined_df[cols]
+        combined_df = pd.concat(all_dfs, ignore_index=True).merge(pd.DataFrame(columns=common_cols), on=common_cols, how='outer')
+        agg_dict = {
+            'peptide': lambda x: ','.join(sorted(set(','.join(x.dropna()).split(',')))),
+            'sequence': 'first',
+            'prev_AA': lambda x: ','.join(sorted(set(','.join(x.dropna()).split(',')))),
+            'next_AA': lambda x: ','.join(sorted(set(','.join(x.dropna()).split(',')))),
+            'seq_len': 'first',
+            'charge': lambda x: ','.join(sorted(set(','.join(x.dropna()).split(',')))),
+            'protein': 'first',
+            'protein_id': 'first',
+            'entry_name': 'first',
+            'gene': 'first',
+            'protein_description': 'first',
+            'mapped_protein': 'first',
+            'mapped_gene': 'first'
+        }
+        agg_dict.pop(group_key)
+        for col in combined_df.columns[13:]:
+            agg_dict[col] = lambda x: x.dropna().iloc[0] if not x.dropna().empty else np.nan
+        combined_df = combined_df.groupby(group_key, as_index=False).agg(agg_dict)
+        binder_cols = [col for col in combined_df.columns if 'binder' in col]
+        allele_cols = [col for col in combined_df.columns if 'allele' in col]
+        spectral_count_cols = [col for col in combined_df.columns if 'spectral_count' in col]
+        for col in spectral_count_cols:
+            combined_df[col] = combined_df[col].astype('Int64')
+        cols = list(combined_df.columns[:13]) + spectral_count_cols + binder_cols + allele_cols
+        combined_df = combined_df[cols]
         combined_df.to_csv(self.result_folder / f'combined_{group_key}.tsv', sep='\t', index=False)
         print('Done.')
 
@@ -341,6 +343,6 @@ class CombinedReporter:
 
 
 if __name__ == '__main__':
-    combined_reporter = CombinedReporter(result_folder='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test',
-                                         fasta_path='/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas')
+    combined_reporter = CombinedReporter(result_folder='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0307',
+                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta')
     combined_reporter.run()

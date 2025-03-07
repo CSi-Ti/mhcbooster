@@ -1,8 +1,8 @@
 import pandas as pd
 import numpy as np
 from typing import List, Union
-from src.utils.peptide import clean_peptide_sequences
-from src.utils.constants import PROTON_MASS
+from mhcbooster.utils.peptide import clean_peptide_sequences
+from mhcbooster.utils.constants import PROTON_MASS
 from collections import Counter
 from tqdm import tqdm
 

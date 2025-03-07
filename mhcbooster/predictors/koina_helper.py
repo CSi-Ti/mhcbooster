@@ -3,9 +3,9 @@ import numpy as np
 import pandas as pd
 from typing import List, Union
 from koinapy import Koina
-from src.utils.constants import MASS_UNIMOD_MAP
-from src.predictors.base_predictor_helper import BasePredictorHelper
-from src.utils.peptide import convert_mass_diff_to_unimod
+from mhcbooster.utils.constants import MASS_UNIMOD_MAP
+from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
+from mhcbooster.utils.peptide import convert_mass_diff_to_unimod
 
 # Updated in Nov 5, 2024
 koina_predictor_map = {
@@ -225,7 +225,6 @@ class KoinaHelper(BasePredictorHelper):
                     pred_ms2['mzs'] = self.pred_df[f'{predictor_name}_mzs']
                     pred_ms2['intensities'] = self.pred_df[f'{predictor_name}_intensities']
                     predictions = self.calc_ms2_scores(self.exp_ms2s, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
-                    # predictions = self.calc_ms2_scores_combine(self.exp_ms2s, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
                     all_predictions = all_predictions.join(predictions, how='outer')
 
         return all_predictions

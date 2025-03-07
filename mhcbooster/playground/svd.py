@@ -2,9 +2,9 @@ import numpy as np
 import pandas as pd
 from sklearn.decomposition import TruncatedSVD
 import matplotlib.pyplot as plt
-from src.utils.fdr import calculate_qs
+from mhcbooster.utils.fdr import calculate_qs
 from pathlib import Path
-from src.predictors.auto_model_predictor import predict_best_combination
+from mhcbooster.predictors.auto_model_predictor import predict_best_combination
 
 feature_paths = list(Path('/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-II/test').rglob('*.features.tsv'))
 

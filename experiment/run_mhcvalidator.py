@@ -1,14 +1,22 @@
 
 import os
+import sys
 from pathlib import Path
-from src.main_mhcbooster import MhcValidator
+
+# sys.path.append('/mnt/d/workspace/mhc-booster')
+from src.main_mhcbooster import MHCBooster, run_mhcbooster
 from src.report.combined_reporter import CombinedReporter
 
 alleles = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
 # alleles = ['DQB1*04', 'DQB1*06', 'DRB1*08', 'DRB1*13']
 pin_files = Path('/mnt/d/data/JY_1_10_25M/fragpipe/Search_0226').rglob('*.pin')
 mzml_folder = Path('/mnt/d/data/JY_1_10_25M/raw')
-output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_combined')
+output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/test')
+pin_files = Path('/mnt/d/data/JY_Fractionation_Replicate_1/raw').rglob('*.pin')
+pin_files = sorted(pin_files, key=lambda f: f.stat().st_size)
+# pin_files = pin_files[1:]
+mzml_folder = Path('/mnt/d/data/JY_Fractionation_Replicate_1/raw')
+output_folder = Path('/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0306_test')
 
 # alleles = ['HLA-A0220', 'HLA-A6801', 'HLA-B3503', 'HLA-B3901', 'HLA-C0401', 'HLA-C0702']
 # # alleles = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
@@ -41,37 +49,44 @@ ms2_top2_hcd_models = ['ms2pip_HCD2021', 'Prosit_2020_intensity_HCD']
 
 auto_predict_predictor = False
 fasta_path = '/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas'
+fasta_path = '/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta'
 rt_predictors = ['Prosit_2019_irt', 'Prosit_2024_irt_cit']
 ms2_predictors = ['ms2pip_timsTOF2024', 'Prosit_2023_intensity_timsTOF']
 ccs_predictors = ['AlphaPeptDeep_ccs_generic', 'IM2Deep']
 # app_predictors = ['mhcflurry', 'netmhcpan', 'bigmhc']
 # app_predictors = ['netmhciipan', 'mixmhc2pred']
 app_predictors = ['mhcflurry', 'netmhcpan']
+app_predictors = []
 
-for pin in pin_files:
-    file_name = pin.stem
-    if 'edited' in file_name:
-        continue
-    print(file_name)
-    validator = MhcValidator(max_threads=os.cpu_count()//2) # Open a MHCvalidator instance, a new one has to be opened for each .pin file
-    validator.set_mhc_params(alleles=alleles, mhc_class='I') # Load the alleles you specified above
-    validator.load_data(pin, filetype='pin') # Load the pin file
-    validator.run(sequence_encoding=True,
-                  app_predictors=app_predictors,
-                  auto_predict_predictor=auto_predict_predictor,
-                  rt_predictors=rt_predictors,
-                  ms2_predictors=ms2_predictors,
-                  ccs_predictors=ccs_predictors,
-                  fine_tune=False,
-                  n_splits=5,
-                  mzml_folder=mzml_folder,
-                  report_directory=output_folder / f'{file_name}')
+# for pin in pin_files:
+#     file_name = pin.stem
+#     if 'edited' in file_name:
+#         continue
+#     print(file_name)
+#     validator = MHCBooster(max_threads=os.cpu_count()//2) # Open a MHCvalidator instance, a new one has to be opened for each .pin file
+#     validator.set_mhc_params(alleles=alleles, mhc_class='I') # Load the alleles you specified above
+#     validator.load_data(pin, filetype='pin') # Load the pin file
+#     validator.run(sequence_encoding=True,
+#                   app_predictors=app_predictors,
+#                   auto_predict_predictor=auto_predict_predictor,
+#                   rt_predictors=rt_predictors,
+#                   ms2_predictors=ms2_predictors,
+#                   ccs_predictors=ccs_predictors,
+#                   fine_tune=False,
+#                   n_splits=5,
+#                   mzml_folder=mzml_folder,
+#                   report_directory=output_folder / f'{file_name}')
+#
+#     if auto_predict_predictor:
+#         rt_predictors = validator.rt_predictors
+#         ms2_predictors = validator.ms2_predictors
+#         ccs_predictors = validator.ccs_predictors
+#         auto_predict_predictor = False
+#
+# combined_reporter = CombinedReporter(result_folder=output_folder, fasta_path=fasta_path)
+# combined_reporter.run()
 
-    if auto_predict_predictor:
-        rt_predictors = validator.rt_predictors
-        ms2_predictors = validator.ms2_predictors
-        ccs_predictors = validator.ccs_predictors
-        auto_predict_predictor = False
-
-combined_reporter = CombinedReporter(result_folder=output_folder, fasta_path=fasta_path)
-combined_reporter.run()
+run_mhcbooster(pin_files, sequence_encoding=True, alleles=alleles, mhc_class='I', app_predictors=app_predictors,
+    auto_predict_predictor=auto_predict_predictor, rt_predictors=rt_predictors, ms2_predictors=ms2_predictors,
+    ccs_predictors=ccs_predictors, fine_tune=False, fasta_path=fasta_path, mzml_folder=mzml_folder,
+    output_folder=output_folder)

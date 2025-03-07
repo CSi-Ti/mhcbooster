@@ -1,7 +1,9 @@
-
+import numba
 import numpy as np
+from mhcbooster.utils.constants import EPSILON
 
 # Remove zero and low intensity signals
+@numba.njit
 def remove_low_intensity_signal(mzs: np.array, ints: np.array, rel_thresh: float = 0.01) -> np.array:
     intensity_threshold = np.max(ints) * rel_thresh
     mask = ints > intensity_threshold
@@ -9,6 +11,7 @@ def remove_low_intensity_signal(mzs: np.array, ints: np.array, rel_thresh: float
     ints = ints[mask]
     return mzs, ints
 
+@numba.njit
 def match_spectra(exp_mzs, exp_ints, pred_mzs, pred_ints, mz_tolerance, use_ppm):
     exp_mzs, exp_ints = remove_low_intensity_signal(exp_mzs, exp_ints)
     exp_indices = np.argsort(exp_mzs)
@@ -42,12 +45,12 @@ def match_spectra(exp_mzs, exp_ints, pred_mzs, pred_ints, mz_tolerance, use_ppm)
                 max_intensity = exp_ints[tmp_exp_idx]
         matched_exp_ints.append(max_intensity)
         matched_pred_ints.append(pred_ints[pred_idx])
-    return np.array(matched_exp_ints), np.array(matched_pred_ints)
+    return np.array(matched_exp_ints, dtype=np.float32), np.array(matched_pred_ints, dtype=np.float32)
 
+@numba.njit
 def match_spectra_to_pred(exp_mzs, exp_ints, pred_mzs, mz_tolerance, use_ppm):
-
     exp_idx = 0
-    matched_exp_ints = np.zeros(len(pred_mzs))
+    matched_exp_ints = np.zeros(len(pred_mzs), dtype=np.float32)
     for pred_idx in range(len(pred_mzs)):
         tmp_mz_tolerance = mz_tolerance * pred_mzs[pred_idx] * 1E-6 if use_ppm else mz_tolerance
         tmp_mz_tolerance = max(tmp_mz_tolerance, 0.01)
@@ -59,15 +62,16 @@ def match_spectra_to_pred(exp_mzs, exp_ints, pred_mzs, mz_tolerance, use_ppm):
             break
         if exp_mzs[exp_idx] > mz_end:
             continue
-        max_intensity = -1
-        for tmp_exp_idx in range(exp_idx, len(exp_mzs)):
-            if exp_mzs[tmp_exp_idx] > mz_end:
-                break
+        max_intensity = 0
+        tmp_exp_idx = exp_idx
+        while tmp_exp_idx < len(exp_mzs) and exp_mzs[tmp_exp_idx] <= mz_end:
             if exp_ints[tmp_exp_idx] > max_intensity:
                 max_intensity = exp_ints[tmp_exp_idx]
+            tmp_exp_idx += 1
         matched_exp_ints[pred_idx] = max_intensity
     return matched_exp_ints
 
+@numba.njit
 def calc_spectral_entropy(matched_exp_ints, matched_pred_ints):
     if len(matched_exp_ints) == 0 or np.sum(matched_exp_ints) == 0:
         return -1
@@ -80,6 +84,7 @@ def calc_spectral_entropy(matched_exp_ints, matched_pred_ints):
     total_entropy = - np.sum(total_ints * np.log(total_ints))
     return 1 - (2 * total_entropy - exp_entropy - pred_entropy) / np.log(4)
 
+@numba.njit
 def calc_cosine_similarity(matched_exp_ints, matched_pred_ints):
     if len(matched_exp_ints) == 0:
         return -1
@@ -98,11 +103,53 @@ def calc_cosine_similarity(matched_exp_ints, matched_pred_ints):
     cos_similarity = dot_product / (exp_len * pred_len)
     return cos_similarity
 
-
+@numba.njit
 def calc_forward_reverse(exp_len, pred_len, matched_len):
     forward_score = float(matched_len) / pred_len
     reverse_score = float(matched_len) / exp_len
     return forward_score, reverse_score
+
+@numba.njit(parallel=True)
+def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, mz_tolerance, use_ppm):
+    assert len(exp_mzs_arr) == len(pred_mzs_arr)
+    n = len(exp_mzs_arr)
+    entropy_scores = np.zeros(n, dtype=np.float32)
+    cosine_scores = np.zeros(n, dtype=np.float32)
+    forward_scores = np.zeros(n, dtype=np.float32)
+    reverse_scores = np.zeros(n, dtype=np.float32)
+
+    for i in numba.prange(n):  # Parallel loop
+        exp_mzs = exp_mzs_arr[i]
+        exp_ints = exp_ints_arr[i]
+        pred_mzs = pred_mzs_arr[i]
+        pred_ints = pred_ints_arr[i]
+
+        # Sort experimental data
+        exp_indices = np.argsort(exp_mzs)
+        exp_mzs = exp_mzs[exp_indices]
+        exp_ints = exp_ints[exp_indices]
+
+        # Process predicted data
+        # pred_mzs, pred_ints = remove_low_intensity_signal(pred_mzs, pred_ints, rel_thresh=0.01)
+        pred_indices = np.argsort(pred_mzs)
+        pred_mzs = pred_mzs[pred_indices]
+        pred_ints = pred_ints[pred_indices]
+
+        # Match spectra
+        matched_exp_ints = match_spectra_to_pred(exp_mzs, exp_ints, pred_mzs, mz_tolerance, use_ppm)
+
+        # Calculate scores
+        entropy_scores[i] = calc_spectral_entropy(matched_exp_ints, pred_ints)
+        cosine_scores[i] = calc_cosine_similarity(matched_exp_ints, pred_ints)
+        n_matched = np.sum(matched_exp_ints > 0)
+        forward_scores[i], reverse_scores[i] = calc_forward_reverse(len(exp_mzs), len(pred_mzs), n_matched)
+
+    entropy_scores = np.clip(entropy_scores, a_min=EPSILON, a_max=None)
+    cosine_scores = np.clip(cosine_scores, a_min=EPSILON, a_max=None)
+    forward_scores = np.clip(forward_scores, a_min=EPSILON, a_max=None)
+    reverse_scores = np.clip(reverse_scores, a_min=EPSILON, a_max=None)
+
+    return entropy_scores, cosine_scores, forward_scores, reverse_scores
 
 
 if __name__ == '__main__':

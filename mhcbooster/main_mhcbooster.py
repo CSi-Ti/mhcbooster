@@ -2,7 +2,8 @@ import os
 import re
 import time
 
-from src.report.run_reporter import RunReporter
+from mhcbooster.report.combined_reporter import CombinedReporter
+from mhcbooster.report.run_reporter import RunReporter
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import pandas as pd
@@ -14,32 +15,32 @@ from tensorflow.keras import backend as K
 from typing import Union, List
 from os import PathLike
 from pathlib import Path
-from src.utils.data_loaders import load_file
-from src.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
-from src.utils.features import prepare_features
-from src.predictors.netmhcpan_helper import NetMHCpanHelper
-from src.predictors.mhcflurry_helper import MhcFlurryHelper
-from src.predictors.bigmhc_helper import BigMhcHelper
-from src.predictors.mixmhc2pred_helper import MixMhc2PredHelper
-from src.predictors.peptdeep_helper import PeptDeepHelper
-from src.predictors.autort_helper import AutortHelper
-from src.predictors.deeplc_helper import DeepLCHelper
-from src.predictors.im2deep_helper import IM2DeepHelper
-from src.predictors.koina_helper import KoinaHelper, general_koina_predictors
-from src.predictors.auto_model_predictor import predict_best_combination
-from src.utils.fdr import calculate_qs, calculate_peptide_level_qs
+from mhcbooster.utils.data_loaders import load_file
+from mhcbooster.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
+from mhcbooster.utils.features import prepare_features
+from mhcbooster.predictors.netmhcpan_helper import NetMHCpanHelper
+from mhcbooster.predictors.mhcflurry_helper import MhcFlurryHelper
+from mhcbooster.predictors.bigmhc_helper import BigMhcHelper
+from mhcbooster.predictors.mixmhc2pred_helper import MixMhc2PredHelper
+from mhcbooster.predictors.peptdeep_helper import PeptDeepHelper
+from mhcbooster.predictors.autort_helper import AutortHelper
+from mhcbooster.predictors.deeplc_helper import DeepLCHelper
+from mhcbooster.predictors.im2deep_helper import IM2DeepHelper
+from mhcbooster.predictors.koina_helper import KoinaHelper, general_koina_predictors
+from mhcbooster.predictors.auto_model_predictor import predict_best_combination
+from mhcbooster.utils.fdr import calculate_qs, calculate_peptide_level_qs
 from mhcflurry.encodable_sequences import EncodableSequences
-from src.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
-from src.utils.peptide import remove_previous_and_next_aa, get_previous_and_next_aa, remove_charge, \
+from mhcbooster.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
+from mhcbooster.utils.peptide import remove_previous_and_next_aa, get_previous_and_next_aa, remove_charge, \
     remove_modifications
-from src.model.nd_standard_scalar import NDStandardScaler
+from mhcbooster.model.nd_standard_scalar import NDStandardScaler
 from copy import deepcopy
 from datetime import datetime
 import tempfile
 from collections import Counter
 import tensorflow.python.util.deprecation as deprecation
 from inspect import signature
-from src.utils.dataset import k_fold_split
+from mhcbooster.utils.dataset import k_fold_split
 
 deprecation._PRINT_DEPRECATION_WARNINGS = False
 
@@ -853,3 +854,33 @@ class MHCBooster:
         run_reporter.generate_sequence_report(seq_fdr=seq_fdr, remove_decoy=remove_decoy)
         run_reporter.draw_result_figure([h.history['val_loss'] for h in history])
 
+
+def run_mhcbooster(pin_files, sequence_encoding, alleles, mhc_class, app_predictors, auto_predict_predictor,
+                   rt_predictors, ms2_predictors, ccs_predictors, fine_tune, fasta_path, mzml_folder, output_folder):
+    output_folder = Path(output_folder)
+    for pin in pin_files:
+        pin = Path(pin)
+        file_name = pin.stem
+        print(file_name)
+        mhcb = MHCBooster(max_threads=max(1, os.cpu_count() - 2))
+        mhcb.set_mhc_params(alleles=alleles, mhc_class=mhc_class)
+        mhcb.load_data(pin, filetype='pin')
+        mhcb.run(sequence_encoding=sequence_encoding,
+                      app_predictors=app_predictors,
+                      auto_predict_predictor=auto_predict_predictor,
+                      rt_predictors=rt_predictors,
+                      ms2_predictors=ms2_predictors,
+                      ccs_predictors=ccs_predictors,
+                      fine_tune=fine_tune,
+                      n_splits=5,
+                      mzml_folder=mzml_folder,
+                      report_directory=output_folder / f'{file_name}')
+
+        if auto_predict_predictor:
+            rt_predictors = mhcb.rt_predictors
+            ms2_predictors = mhcb.ms2_predictors
+            ccs_predictors = mhcb.ccs_predictors
+            auto_predict_predictor = False
+
+    combined_reporter = CombinedReporter(result_folder=output_folder, fasta_path=fasta_path)
+    combined_reporter.run()

@@ -5,24 +5,26 @@ import tempfile
 import numpy as np
 import pandas as pd
 
-from src.utils.constants import MASS_UNIMOD_MAP, UNIMOD_NAME_MAP
-from src.utils.peptide import get_pos_unimod_map
-from src.predictors.base_predictor_helper import BasePredictorHelper
+from mhcbooster.utils.constants import MASS_UNIMOD_MAP, UNIMOD_NAME_MAP
+from mhcbooster.utils.peptide import get_pos_unimod_map
+from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
 
 
-class DeepLCHelper(BasePredictorHelper):
+class IM2DeepHelper(BasePredictorHelper):
     def __init__(self,
                  peptides: list[str],
                  peptides_with_mods: list[str],
-                 exp_rts: np.array,
+                 charges: list[int],
+                 exp_ims: np.array,
                  high_prob_indices: np.array,
                  report_directory: str,
                  fine_tune: bool = False,
                  verbose: bool = False):
-        super().__init__('DeepLC', report_directory)
+        super().__init__('IM2Deep', report_directory)
 
         # Prepare dataframe for PeptDeep prediction
         self.peptide_df = pd.DataFrame(peptides, columns=['seq'])
+        self.peptide_df['charge'] = charges
         self.peptide_df['modifications'] = ''
         for i, peptide in enumerate(peptides_with_mods):
             pos_unimod_map, _ = get_pos_unimod_map(peptide, MASS_UNIMOD_MAP)
@@ -34,19 +36,19 @@ class DeepLCHelper(BasePredictorHelper):
                 mod.append(UNIMOD_NAME_MAP[unimod_num])
             mod = '|'.join(mod)
             self.peptide_df.loc[i, 'modifications'] = mod
-        self.peptide_df['tr'] = exp_rts
+        self.peptide_df['CCS'] = exp_ims * charges * 200
 
-        self.exp_rts = exp_rts
+        self.exp_ims = exp_ims
         self.high_prob_indices = high_prob_indices
         self.fine_tune = fine_tune
         self.verbose = verbose
 
-        if self.high_prob_indices is None:
+        if self.high_prob_indices is None or len(self.high_prob_indices) < 100:
             print('Not enough high quality peptides for fine-tuning. Skipping...')
             self.fine_tune = False
 
     def predict_df(self):
-        print('Running DeepLC predictor...')
+        print('Running IM2Deep predictor...')
 
         # Prepare file for calibration
         if self.fine_tune:
@@ -65,11 +67,11 @@ class DeepLCHelper(BasePredictorHelper):
         # Perform prediction
         with tempfile.NamedTemporaryFile('w', delete=False) as result_file:
             if self.fine_tune:
-                command = f'deeplc --file_pred {input_file.name} --file_cal {train_file.name} --file_pred_out {result_file.name}'
+                command = f'im2deep {input_file.name} -c {train_file.name} -o {result_file.name}'
             else:
-                command = f'deeplc --file_pred {input_file.name} --file_pred_out {result_file.name}'
+                command = f'im2deep {input_file.name} -o {result_file.name}'
 
-            print('Predicting RTs using DeepLC...')
+            print('Predicting CCSs using IM2Deep...')
             if self.verbose:
                 subprocess.run(command, shell=True)
             else:
@@ -85,14 +87,16 @@ class DeepLCHelper(BasePredictorHelper):
 
     def score_df(self) -> pd.DataFrame:
 
-        pred_rts = self.pred_df[f'predicted retention time'].to_numpy(dtype=np.float32)
+        pred_ims = self.pred_df[f'predicted CCS'].to_numpy(dtype=np.float32) / self.pred_df['charge'].to_numpy(
+            dtype=int) / 200
         if self.fine_tune:
-            predictions = self.calc_rt_scores(self.exp_rts, pred_rts)
+            predictions = self.calc_im_scores(self.exp_ims, pred_ims)
+            self.align_pred_to_exp(pred_ims[self.high_prob_indices], self.exp_ims[self.high_prob_indices], pred_ims, figure_name='alignment_im2deep')
         else:
             if self.high_prob_indices is None:
-                aligned_pred_rts = self.align_pred_to_exp_coarse(pred_rts, self.exp_rts, figure_name='alignment_deeplc')
+                aligned_pred_ims = self.align_pred_to_exp_coarse(pred_ims, self.exp_ims, figure_name='alignment_im2deep')
             else:
-                aligned_pred_rts = self.align_pred_to_exp(pred_rts[self.high_prob_indices], self.exp_rts[self.high_prob_indices], pred_rts, figure_name='alignment_deeplc')
-            predictions = self.calc_rt_scores(self.exp_rts, aligned_pred_rts)
+                aligned_pred_ims = self.align_pred_to_exp(pred_ims[self.high_prob_indices], self.exp_ims[self.high_prob_indices], pred_ims, figure_name='alignment_im2deep')
+            predictions = self.calc_im_scores(self.exp_ims, aligned_pred_ims)
 
         return predictions

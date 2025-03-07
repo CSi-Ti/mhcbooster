@@ -1,9 +1,9 @@
 import pandas as pd
 
-from src.predictors.netmhcpan_helper import NetMHCpanHelper
-from src.predictors.mhcflurry_helper import MhcFlurryHelper
-from src.predictors.bigmhc_helper import BigMhcHelper
-from src.predictors.mixmhc2pred_helper import MixMhc2PredHelper
+from mhcbooster.predictors.netmhcpan_helper import NetMHCpanHelper
+from mhcbooster.predictors.mhcflurry_helper import MhcFlurryHelper
+from mhcbooster.predictors.bigmhc_helper import BigMhcHelper
+from mhcbooster.predictors.mixmhc2pred_helper import MixMhc2PredHelper
 
 class BindingPredictor:
     def __init__(self, result_folder, allele_path, app_predictors):

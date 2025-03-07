@@ -16,11 +16,11 @@ from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QRadioButton,
                                QDoubleSpinBox, QProgressBar, QTextBrowser)
 
-from src.utils.package_installer import *
+from mhcbooster.utils.package_installer import *
 
 ROOT_PATH = Path(__file__).parent.parent.parent
 sys.path.append(ROOT_PATH.as_posix())
-from src import __version__
+from mhcbooster import __version__
 
 
 def grid_layout(label, elements, n_same_row=4):
@@ -66,7 +66,7 @@ class MhcBoosterGUI(QWidget):
             """)
 
         # GUI window
-        self.setWindowTitle('MHCBooster')
+        self.setWindowTitle(f'MHCBooster {__version__}')
         self.setWindowIcon(QIcon(str(Path(__file__).parent/'caronlab_icon.png')))
         # self.setGeometry(100, 100, 800, 600)
         layout = QVBoxLayout()
@@ -75,7 +75,7 @@ class MhcBoosterGUI(QWidget):
 
         ### INTRODUCTION
         logo_lab_label = QLabel()
-        logo_pix_map = QPixmap(str(Path(__file__).parent/'caronlab.png')).scaled(200, 150, Qt.KeepAspectRatio)
+        logo_pix_map = QPixmap(str(Path(__file__).parent/'caronlab.png')).scaled(160, 120, Qt.KeepAspectRatio)
         logo_lab_label.setPixmap(logo_pix_map)
         logo_lab_label.resize(logo_pix_map.size())
         intro_label = QLabel('<p style="line-height: 1.2;"><b>MHCBooster: An AI-powered Software to Boost DDA-based Immunopeptide Identification.</b><br>'
@@ -822,7 +822,7 @@ class MhcBoosterGUI(QWidget):
             msfragger_exe_path = Path(__file__).parent.parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
             msfragger_split_path = Path(__file__).parent.parent.parent/'third_party'/'msfragger_pep_split.py'
             avail_mem = psutil.virtual_memory().available / (1024 ** 3)
-            fasta_size =  Path('/mnt/d/Out_27.csv').stat().st_size / (1024 ** 2)
+            fasta_size =  Path(self.raw_fasta_inputbox.text()).stat().st_size / (1024 ** 2)
             split = int(fasta_size / avail_mem * 8)
 
             param_path = self.raw_param_inputbox.text()

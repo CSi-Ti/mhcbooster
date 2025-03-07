@@ -3,9 +3,10 @@ import numpy as np
 import pandas as pd
 
 from tqdm import tqdm
+from collections import deque
 from pyteomics import mzml
 
-from src.utils.constants import PROTON_MASS
+from mhcbooster.utils.constants import PROTON_MASS
 
 def _extract_rt(spectrum):
     rt = spectrum['scanList']['scan'][0]['scan start time']
@@ -117,15 +118,17 @@ def get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, scan_nrs, masses, charges):
 
     target_mzs = masses / charges + PROTON_MASS
     mzml_file = mzml.read(mzml_path)
-    ms2_list = []
+    scan_nrs = [str(nr) for nr in scan_nrs]
+    ms2_list = deque()
     scan_nr_idx = 0
     for data in tqdm(mzml_file, desc='Loading related MS2 spectrum to memory...'):
-        tmp_scan_nr = data['spectrum title'].split('.')[-2]
-        if tmp_scan_nr == str(scan_nrs[scan_nr_idx]):
+        tmp_scan_nr = data['spectrum title'].rsplit('.', 2)[-2]
+        if tmp_scan_nr == scan_nrs[scan_nr_idx]:
             ms2_list.append(data)
             scan_nr_idx += 1
             if scan_nr_idx == len(scan_nrs):
                 break
+    ms2_list = list(ms2_list)
     assert len(ms2_list) == len(scan_nrs), 'Error in MSFragger uncalibrated mzML file reading...'
     exp_rts = [None] * len(scan_nrs)
     exp_ims = [None] * len(scan_nrs)

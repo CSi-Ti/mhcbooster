@@ -11,7 +11,7 @@ from pathlib import Path
 
 from tqdm import tqdm
 
-from src.predictors.base_predictor_helper import BasePredictorHelper
+from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class AutortHelper(BasePredictorHelper):
@@ -38,7 +38,7 @@ class AutortHelper(BasePredictorHelper):
         self.fine_tune = fine_tune
         self.verbose = verbose
 
-        if self.high_prob_indices is None:
+        if self.high_prob_indices is None or len(self.high_prob_indices) < 100:
             print('Not enough high quality peptides for fine-tuning. Skipping...')
             self.fine_tune = False
 
@@ -129,7 +129,7 @@ class AutortHelper(BasePredictorHelper):
 
         if self.fine_tune:
             predictions = self.calc_rt_scores(exp_rts, pred_rts)
-            self.align_pred_to_exp_coarse(pred_rts, exp_rts, figure_name='alignment_autort')
+            self.align_pred_to_exp(pred_rts[self.high_prob_indices], exp_rts[self.high_prob_indices], figure_name='alignment_autort')
         else:
             if self.high_prob_indices is None:
                 aligned_pred_rts = self.align_pred_to_exp_coarse(pred_rts, exp_rts, figure_name='alignment_autort')

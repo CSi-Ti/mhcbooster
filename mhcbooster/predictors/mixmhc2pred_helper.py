@@ -7,9 +7,9 @@ from pathlib import Path
 from typing import List
 from mhcnames import normalize_allele_name
 
-from src.utils.allele import prepare_class_II_alleles
-from src.utils.constants import EPSILON
-from src.predictors.base_predictor_helper import BasePredictorHelper
+from mhcbooster.utils.allele import prepare_class_II_alleles
+from mhcbooster.utils.constants import EPSILON
+from mhcbooster.predictors.base_predictor_helper import BasePredictorHelper
 
 
 class MixMhc2PredHelper(BasePredictorHelper):
