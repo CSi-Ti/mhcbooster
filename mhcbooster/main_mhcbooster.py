@@ -604,15 +604,15 @@ class MHCBooster:
 
         self.mzml_folder = str(mzml_folder)
 
-        self.rt_predictors = rt_predictors
-        self.ms2_predictors = ms2_predictors
-        self.ccs_predictors = ccs_predictors
-        self.app_predictors = app_predictors
+        self.rt_predictors = rt_predictors if rt_predictors is not None else []
+        self.ms2_predictors = ms2_predictors if ms2_predictors is not None else []
+        self.ccs_predictors = ccs_predictors if ccs_predictors is not None else []
+        self.app_predictors = app_predictors if app_predictors is not None else []
         self.auto_predict_predictor = auto_predict_predictor
         self.fine_tune = fine_tune
         self.koina_server_url = koina_server_url
 
-        if self.app_predictors is not None and len(self.app_predictors) > 0:
+        if len(self.app_predictors) > 0:
             self.app_predictors = [p.lower() for p in self.app_predictors]
             if 'netmhcpan' in self.app_predictors or 'netmhciipan' in self.app_predictors:
                 self.add_netmhcpan_predictions()
@@ -648,22 +648,22 @@ class MHCBooster:
             self.feature_matrix.drop(drop_columns, axis=1, inplace=True)
         else:
             predictor_types = []
-            if self.rt_predictors is not None and len(self.rt_predictors) > 0:
+            if len(self.rt_predictors) > 0:
                 self.rt_predictors = [p.lower() for p in self.rt_predictors]
                 predictor_types.append('RT')
-            if self.ms2_predictors is not None and len(self.ms2_predictors) > 0:
+            if len(self.ms2_predictors) > 0:
                 predictor_types.append('MS2')
                 self.ms2_predictors = [p.lower() for p in self.ms2_predictors]
-            if self.ccs_predictors is not None and len(self.ccs_predictors) > 0:
+            if len(self.ccs_predictors) > 0:
                 predictor_types.append('CCS')
                 self.ccs_predictors = [p.lower() for p in self.ccs_predictors]
             self.load_psm_coordinates(predictor_types=predictor_types)
             
-            if self.rt_predictors is not None and 'autort' in self.rt_predictors:
+            if 'autort' in self.rt_predictors:
                 self.add_autort_predictions()
-            if self.rt_predictors is not None and 'deeplc' in self.rt_predictors:
+            if 'deeplc' in self.rt_predictors:
                 self.add_deeplc_predictions()
-            if self.ccs_predictors is not None and 'im2deep' in self.ccs_predictors and self.fine_tune and np.max(self.exp_ims) > 0:
+            if 'im2deep' in self.ccs_predictors and self.fine_tune and np.max(self.exp_ims) > 0:
                 self.add_im2deep_predictions()
 
             self.koina_predictors = []
