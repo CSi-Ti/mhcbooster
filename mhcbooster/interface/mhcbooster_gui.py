@@ -2,6 +2,7 @@
 import os
 import subprocess
 import sys
+import select
 import tempfile
 import webbrowser
 import time
@@ -1112,7 +1113,7 @@ class MhcBoosterWorker(QThread):
             if self._stop_flag:
                 break
 
-            self.process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
+            self.process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
             while True:
                 if self._stop_flag:
                     parent_process = psutil.Process(self.process.pid)
@@ -1123,19 +1124,26 @@ class MhcBoosterWorker(QThread):
                     self.message.emit(f'Terminating MHCBooster main process...')
                     self.process.terminate()
                     try:
-                        self.process.wait(timeout=1) # Wait a bit to allow graceful termination
+                        self.process.wait(timeout=1)
                         self.message.emit("Terminated gracefully.")
                     except subprocess.TimeoutExpired:
                         self.process.kill()
                         self.message.emit("Process didn't terminate in time, forcibly killed.")
                     break
 
-                stdout_line = self.process.stdout.readline()
-                if stdout_line:
-                    msg = stdout_line.strip()
-                    self.message.emit(msg)
-
-                if not stdout_line:
+                rlist, _, _ = select.select([self.process.stdout], [], [], 0.1)
+                if rlist:
+                    line = self.process.stdout.readline()
+                    if line:
+                        self.message.emit(line.strip())
+                    else:
+                        # EOF reached; check process return code.
+                        ret_code = self.process.poll()
+                        if ret_code is not None:
+                            self.message.emit(f"Process finished with return code: {ret_code}")
+                            break
+                else:
+                    # No data available; check if the process has finished.
                     ret_code = self.process.poll()
                     if ret_code is not None:
                         self.message.emit(f"Process finished with return code: {ret_code}")
