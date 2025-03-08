@@ -3,6 +3,9 @@ import zipfile
 import tarfile
 import requests
 import shutil
+import json
+import subprocess
+
 from pathlib import Path
 
 from future.moves import sys
@@ -25,7 +28,20 @@ def install_autort(path):
     print('Installing AutoRT...')
     with zipfile.ZipFile(path, 'r') as zip_ref:
         zip_ref.extractall(target_folder)
-        print('AutoRT installed to {}'.format(target_folder))
+
+    env_exist = False
+    output = subprocess.check_output(["conda", "info", "--json"], text=True)
+    data = json.loads(output)
+    env_paths = data.get("envs", [])
+    for env_path in env_paths:
+        if Path(env_path).name == 'autort':
+            env_exist = True
+            print('Conda environment "autort" already exists, skipping installation')
+            break
+    if not env_exist:
+        print('Installing conda environment of AutoRT...')
+        subprocess.run('conda create -n autort python==3.8 -y && conda run -n autort pip install tensorflow==2.6.0 keras==2.6.0 matplotlib pandas scikit-learn numpy psutil protobuf==3.19.6', shell=True)
+    print('AutoRT installed to {}'.format(target_folder))
 
 
 def install_bigmhc(path):
