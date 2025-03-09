@@ -93,14 +93,7 @@ class BigMhcHelper(BasePredictorHelper):
         else:
             command = f'python {self.bigmhc_exe_path} -i {pep_file_path} -o {results_file_path} -m im -d {device}'
 
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, shell=True)
-        for line in iter(process.stdout.readline, ''):
-            print(line.strip())
-        for line in iter(process.stderr.readline, ''):
-            print(line.strip())
-        process.stdout.close()
-        process.stderr.close()
-        process.wait()
+        subprocess.run(command, shell=True)
 
         self.pred_df = pd.read_csv(results_file_path, index_col=False)
 

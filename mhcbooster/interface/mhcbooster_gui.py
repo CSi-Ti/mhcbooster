@@ -823,8 +823,10 @@ class MhcBoosterGUI(QWidget):
             msfragger_exe_path = Path(__file__).parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
             msfragger_split_path = Path(__file__).parent.parent/'third_party'/'msfragger_pep_split.py'
             avail_mem = psutil.virtual_memory().available / (1024 ** 3)
+            self.add_log(f'Avail Memory = {avail_mem:.2f} GB')
             fasta_size =  Path(self.raw_fasta_inputbox.text()).stat().st_size / (1024 ** 2)
             split = int(fasta_size / avail_mem * 8)
+            self.add_log(f'Splitting fasta to {split} slices...')
 
             param_path = self.raw_param_inputbox.text()
             param_data = list(open(param_path).read().splitlines())
@@ -842,10 +844,10 @@ class MhcBoosterGUI(QWidget):
                 if raw_file.with_suffix('.pin').exists():
                     continue
                 if split > 1:
-                    command = (f'python {msfragger_split_path} {split} "{java_exe_path} -jar -Dfile.encoding=UTF-8"'
+                    command = (f'python {msfragger_split_path} {split} "{java_exe_path} -Xmx{int(avail_mem)}G -jar -Dfile.encoding=UTF-8"'
                                f' {msfragger_exe_path} {tmp_param_file.name} {raw_file}')
                 else:
-                    command = (f'{java_exe_path} -jar -Dfile.encoding=UTF-8 {msfragger_exe_path} '
+                    command = (f'{java_exe_path} -Xmx{int(avail_mem)}G -jar -Dfile.encoding=UTF-8 {msfragger_exe_path} '
                                f'{tmp_param_file.name} {raw_file}')
                 commands.append(command)
             self.psm_inputbox.setText(self.raw_inputbox.text())
@@ -1109,11 +1111,12 @@ class MhcBoosterWorker(QThread):
 
     def run(self):
         self._stop_flag = False
+        env = os.environ.copy()
+        env['PYTHONUNBUFFERED'] = '1'
         for command in self.commands:
             if self._stop_flag:
                 break
-
-            self.process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True)
+            self.process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, env=env)
             while True:
                 if self._stop_flag:
                     parent_process = psutil.Process(self.process.pid)

@@ -119,6 +119,7 @@ def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, 
     reverse_scores = np.zeros(n, dtype=np.float32)
 
     for i in numba.prange(n):  # Parallel loop
+        i = int(i)
         exp_mzs = exp_mzs_arr[i]
         exp_ints = exp_ints_arr[i]
         pred_mzs = pred_mzs_arr[i]
