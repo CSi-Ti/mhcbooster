@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/375429185.svg)](https://zenodo.org/doi/10.5281/zenodo.13736548)
+
 # MHCBooster
 Immunopeptide identification in data-dependent acquisition (DDA) is crucial for
 understanding immune responses and developing targeted therapies.
@@ -24,7 +24,7 @@ pip install mhcbooster
 
 # WSL
 sudo apt update
-sudo apt install libxcb-xinerama0 libxcb-cursor0 libx11-xcb1 qt5-qmake qtbase5-dev qtchooser qtbase5-dev-tools 
+sudo apt install libxcb-xinerama0 libxcb-cursor0 libx11-xcb1 qt5-qmake qtbase5-dev qtchooser qtbase5-dev-tools   # GUI
 sudo apt install tcsh    # NetMHCpan env
 mhcflurry-downloads fetch models_class1_presentation    # MHCflurry env
 ```
