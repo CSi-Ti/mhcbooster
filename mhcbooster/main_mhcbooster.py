@@ -16,7 +16,7 @@ from typing import Union, List
 from os import PathLike
 from pathlib import Path
 from mhcbooster.utils.data_loaders import load_file
-from mhcbooster.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml
+from mhcbooster.utils.mzml_parser import get_rt_ccs_ms2_from_mzml, get_rt_ccs_ms2_from_msfragger_mzml, get_rt_ccs_ms2_from_timsconvert_mzml
 from mhcbooster.utils.features import prepare_features
 from mhcbooster.predictors.netmhcpan_helper import NetMHCpanHelper
 from mhcbooster.predictors.mhcflurry_helper import MhcFlurryHelper
@@ -229,9 +229,11 @@ class MHCBooster:
         self._check_peptide_lengths()
 
         # Charge
-        self.charges = np.zeros(len(self.peptides_with_mods), dtype=int)
+        self.charges = np.ones(len(self.peptides_with_mods), dtype=int)
         for col in self.raw_data.columns:
-            if 'charge' in col.lower():
+            if 'z=other' in col:
+                continue
+            if 'charge' in col.lower() or 'z=' in col:
                 self.charges[self.raw_data[col] == '1'] =  int(re.findall(r'\d+', col)[0])
 
         # High prob indices
@@ -244,6 +246,8 @@ class MHCBooster:
             qs = calculate_qs(self.raw_data['lnExpect'].astype(float), self.labels, higher_better=False)
         elif 'log10_evalue' in self.raw_data.columns:
             qs = calculate_qs(self.raw_data['log10_evalue'].astype(float), self.labels, higher_better=False)
+        elif 'ln(hyperscore)' in self.raw_data.columns:
+            qs = calculate_qs(self.raw_data['ln(hyperscore)'].astype(float), self.labels, higher_better=True)
         else:
             qs = None
             print('lnExpect or log10_evalue score cannot be found from input files. Processing without calibration!')
@@ -300,13 +304,19 @@ class MHCBooster:
             mzml_name = self.filepath.name.replace('_edited.pin', '').replace('.pin', '')
             assert mzml_name in mzml_map.keys(), f'mzML file not found: {self.mzml_folder}/{mzml_name}.mzML '
             mzml_path = mzml_map[mzml_name]
+            # MSFragger mzML
             if '_uncalibrated.' in mzml_path:
                 self.exp_rts, self.exp_ims, self.exp_ms2s = \
-                    get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
+                    get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'],
                                                        self.raw_data['ExpMass'].astype(float), self.charges)
+            # Sage - timsconvert
+            elif 'ln(hyperscore)' in self.raw_data.columns:
+                self.exp_rts, self.exp_ims, self.exp_ms2s = \
+                    get_rt_ccs_ms2_from_timsconvert_mzml(mzml_path, self.raw_data['ScanNr'],
+                                             self.raw_data['ExpMass'].astype(float), self.charges)
             else:
                 self.exp_rts, self.exp_ims, self.exp_ms2s = \
-                    get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'].astype(int),
+                    get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'],
                                              self.raw_data['ExpMass'].astype(float), self.charges)
 
     def add_mhcflurry_predictions(self):

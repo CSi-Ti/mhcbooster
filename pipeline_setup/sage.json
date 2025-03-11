@@ -1,0 +1,71 @@
+{
+    "database": {
+        "prefilter": true,
+        "prefilter_chunk_size": 300,
+        "prefilter_low_memory": true,
+        "bucket_size": 8192,
+        "enzyme": {
+            "missed_cleavages": 2,
+            "min_len": 7,
+            "max_len": 18,
+            "cleave_at": "",
+            "restrict": null,
+            "c_terminal": null,
+            "semi_enzymatic": null
+        },
+        "peptide_min_mass": 200.0,
+        "peptide_max_mass": 5000.0,
+        "ion_kinds": [
+            "b",
+            "y"
+        ],
+        "min_ion_index": 2,
+        "max_variable_mods": 3,
+        "static_mods": {
+        },
+        "variable_mods": {
+            "M": [15.9949],
+            "[": [42.0106],
+            "^Q": [-17.0265],
+            "^E": [-18.0106],
+            "C": [119.0041]
+        },
+        "decoy_tag": "rev_",
+        "generate_decoys": false
+    },
+    "quant": {
+        "lfq": true,
+        "lfq_settings": {
+            "peak_scoring": "Hybrid",
+            "integration": "Sum",
+            "spectral_angle": 0.6,
+            "ppm_tolerance": 5.0
+        }
+    },
+    "precursor_tol": {
+        "ppm": [
+            -20.0,
+            20.0
+        ]
+    },
+    "fragment_tol": {
+        "ppm": [
+            -20.0,
+            20.0
+        ]
+    },
+    "precursor_charge": [
+        1,
+        4
+    ],
+    "isotope_errors": [
+        0,
+        1
+    ],
+    "deisotope": true,
+    "min_peaks": 15,
+    "max_peaks": 150,
+    "max_fragment_charge": 2,
+    "min_matched_peaks": 5,
+    "predict_rt": true
+}

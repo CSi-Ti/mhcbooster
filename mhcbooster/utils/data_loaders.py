@@ -396,5 +396,8 @@ def load_file(filename: Union[str, PathLike],
     if before != after:
         print(f"INFO: {before-after} PSMs were outside tolerable peptide lengths or contained uncommon amino acids "
               f"and were dropped.")
+
+    df['ScanNr'] = df['ScanNr'].astype(int)
+    df = df.sort_values(by='ScanNr')
     df.reset_index(inplace=True, drop=True)
     return df

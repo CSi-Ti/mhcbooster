@@ -122,7 +122,7 @@ def convert_mass_diff_to_unimod(peptides: List[str], mass_unimod_map, supported_
     unsolved_mods_list = []
     unimod_peptides = []
     for peptide in peptides:
-        positions = [m.span() for m in re.finditer(pattern, peptide)]
+        positions = [list(m.span()) for m in re.finditer(pattern, peptide)]
         unsolved_mods = {}
         unimod_peptide = peptide
         mass_str_lens = np.array([span[1] - span[0] for span in positions], dtype=int)
@@ -132,12 +132,14 @@ def convert_mass_diff_to_unimod(peptides: List[str], mass_unimod_map, supported_
             mod_mass_diff = float(unimod_peptide[span[0] + 1: span[1] - 1])
             round_mass_diff = round(mod_mass_diff, 4)
 
+            if span[1] < len(unimod_peptide) and unimod_peptide[span[1]] == '-':
+                span[1] += 1
             if round_mass_diff in mass_unimod_map.keys():
                 unimod_number = mass_unimod_map[round_mass_diff]
-                mod_aa = unimod_peptide[span[0] - 1]
+                mod_aa = unimod_peptide[span[0] - 1] if span[0] > 0 else ''
                 mod_key = mod_aa + unimod_number
                 if supported_list is None or mod_key in supported_list:
-                    if mod_aa == 'n':
+                    if mod_aa == 'n' or mod_aa == '':
                         unimod_peptide = '[UNIMOD:1]-' + unimod_peptide[span[1]:]
                     else:
                         unimod_peptide = unimod_peptide[:span[0] + 1] + 'UNIMOD:' + unimod_number + unimod_peptide[span[1] - 1:]

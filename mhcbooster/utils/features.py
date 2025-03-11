@@ -277,7 +277,7 @@ def prepare_pin_features(data, use_features: Union[List[str], None]):
             if len(data['rank'].unique()) > 1:
                 raise NotImplementedError('Sorry, searches with more than one peptide hit per spectrum are not '
                                           'yet supported.')
-        do_not_use = ['SpecId', 'Label', 'ScanNr', 'Peptide', 'Proteins']
+        do_not_use = ['SpecId', 'Label', 'ScanNr', 'Peptide', 'Proteins', 'FileName', 'ln(precursor_ppm)']
         to_use = [x for x in data.columns if x not in do_not_use]
         for feature in to_use:
             features[feature] = data[feature].astype(np.float32)

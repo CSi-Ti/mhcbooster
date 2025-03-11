@@ -41,6 +41,7 @@ def _extract_im_ms2_msfragger(spectrum):
         im = spectrum['scanList']['scan'][0]['inverse reduced ion mobility']
     return im, ce, mzs, ints
 
+
 def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
 
     target_mzs = masses / charges + PROTON_MASS
@@ -52,6 +53,80 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
         ms_list = ms2_list
     else:
         ms_list = ms1_list
+    exp_rts = [None] * len(scan_nrs)
+    exp_ims = [None] * len(scan_nrs)
+    exp_mzs = [None] * len(scan_nrs)
+    exp_intensities = [None] * len(scan_nrs)
+    exp_ces = [None] * len(scan_nrs)
+    for i, scan_nr in tqdm(enumerate(scan_nrs), total=len(scan_nrs), desc='Extracting RTs, CCSs, MS2s...'):
+        spectrum = ms_list[scan_nr - 1]
+        target_rt = _extract_rt(spectrum)
+        exp_rts[i] = target_rt
+        precursor_mz, lower_offset, upper_offset = _extract_mz(spectrum)
+        if precursor_mz - lower_offset < target_mzs[i] < precursor_mz + upper_offset:
+            im, ce, mzs, ints = _extract_im_ms2(spectrum)
+            exp_ims[i] = im
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
+            continue
+
+        # Search neighbor for TimsTOF data
+        matched = False
+        for j in range(1, scan_nr):  # to left
+            spectrum = ms_list[scan_nr - j - 1]
+            rt = _extract_rt(spectrum)
+            if rt != target_rt:
+                break
+            precursor_mz, lower_offset, upper_offset = _extract_mz(spectrum)
+            if precursor_mz - lower_offset < target_mzs[i] < precursor_mz + upper_offset:
+                matched = True
+                im, ce, mzs, ints = _extract_im_ms2(spectrum)
+                exp_ims[i] = im
+                exp_ces[i] = ce
+                exp_mzs[i] = mzs
+                exp_intensities[i] = ints
+                break
+        if matched:
+            continue
+        for j in range(1, len(ms_list) - scan_nr + 1): # to right
+            spectrum = ms_list[scan_nr + j - 1]
+            rt = spectrum['scanList']['scan'][0]['scan start time']
+            if rt != target_rt:
+                break
+            precursor_mz, lower_offset, upper_offset = _extract_mz(spectrum)
+            if precursor_mz - lower_offset < target_mzs[i] < precursor_mz + upper_offset:
+                matched = True
+                im, ce, mzs, ints = _extract_im_ms2(spectrum)
+                exp_ims[i] = im
+                exp_ces[i] = ce
+                exp_mzs[i] = mzs
+                exp_intensities[i] = ints
+                break
+        if not matched:
+            print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+
+    exp_rts = np.array(exp_rts)
+    exp_ims = np.array(exp_ims)
+    exp_spectra = pd.DataFrame()
+    exp_spectra['mzs'] = exp_mzs
+    exp_spectra['intensities'] = exp_intensities
+    exp_spectra['ce'] = exp_ces
+    return exp_rts, exp_ims, exp_spectra
+
+
+def get_rt_ccs_ms2_from_timsconvert_mzml(mzml_path, scan_nrs, masses, charges):
+
+    target_mzs = masses / charges + PROTON_MASS
+    mzml_file = mzml.read(mzml_path)
+    ms1_list = [data for data in tqdm(mzml_file, desc='Loading mzML spectra to memory...')]
+    # ms2_list = [data for data in ms1_list if data['ms level'] == 2]
+
+    # if len(ms2_list) > 0 and 'inverse reduced ion mobility' in ms2_list[0]['precursorList']['precursor'][0]['selectedIonList']['selectedIon'][0].keys():
+    #     ms_list = ms2_list
+    # else:
+    #     ms_list = ms1_list
+    ms_list = ms1_list
     exp_rts = [None] * len(scan_nrs)
     exp_ims = [None] * len(scan_nrs)
     exp_mzs = [None] * len(scan_nrs)
