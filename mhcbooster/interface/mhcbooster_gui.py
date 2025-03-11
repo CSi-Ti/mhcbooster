@@ -8,7 +8,7 @@ import webbrowser
 import time
 import psutil
 from datetime import datetime
-
+from pathlib import Path
 from PySide6.QtCore import Qt, QThread, Signal, QSettings
 from PySide6.QtGui import QPixmap, QIcon, QTextCursor, QFont
 from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
@@ -17,11 +17,13 @@ from PySide6.QtWidgets import (QApplication, QWidget, QPushButton, QLabel,
                                QMessageBox, QTextEdit, QTabWidget, QStackedWidget, QRadioButton,
                                QDoubleSpinBox, QProgressBar, QTextBrowser)
 
-from mhcbooster.utils.package_installer import *
 
 ROOT_PATH = Path(__file__).parent.parent.parent
 sys.path.append(ROOT_PATH.as_posix())
 from mhcbooster import __version__
+from mhcbooster.utils.package_installer import *
+from mhcbooster.adapter.msfragger_adapter import get_msfragger_command
+from mhcbooster.adapter.sage_adapter import get_sage_command
 
 
 def grid_layout(label, elements, n_same_row=4):
@@ -819,37 +821,12 @@ class MhcBoosterGUI(QWidget):
 
         commands = []
         if self.raw_radiobutton.isChecked():
-            java_exe_path = Path(__file__).parent.parent/'third_party'/'jre-17.0.14'/'bin'/'java'
-            msfragger_exe_path = Path(__file__).parent.parent/'third_party'/'MSFragger-4.1'/'MSFragger-4.1.jar'
-            msfragger_split_path = Path(__file__).parent.parent/'third_party'/'msfragger_pep_split.py'
-            avail_mem = psutil.virtual_memory().available / (1024 ** 3)
-            self.add_log(f'Avail Memory = {avail_mem:.2f} GB')
-            fasta_size =  Path(self.raw_fasta_inputbox.text()).stat().st_size / (1024 ** 2)
-            split = int(fasta_size / avail_mem * 8)
-            self.add_log(f'Splitting fasta to {split} slices...')
-
             param_path = self.raw_param_inputbox.text()
-            param_data = list(open(param_path).read().splitlines())
-            param_data = [line for line in param_data if not line.startswith('database_name')
-                          and not line.startswith('num_threads')]
-            param_data.insert(0, f'database_name = {self.raw_fasta_inputbox.text()}')
-            param_data.insert(1, f'num_threads = {self.thread_spinbox.value()}')
-            with tempfile.NamedTemporaryFile('w', delete=False) as tmp_param_file:
-                tmp_param_file.write('\n'.join(param_data))
-                tmp_param_file.flush()
-
-            for raw_file in Path(self.raw_inputbox.text()).iterdir():
-                if raw_file.suffix not in {'.d', '.raw', '.RAW', '.wiff'}:
-                    continue
-                if raw_file.with_suffix('.pin').exists():
-                    continue
-                if split > 1:
-                    command = (f'python {msfragger_split_path} {split} "{java_exe_path} -Xmx{int(avail_mem)}G -jar -Dfile.encoding=UTF-8"'
-                               f' {msfragger_exe_path} {tmp_param_file.name} {raw_file}')
-                else:
-                    command = (f'{java_exe_path} -Xmx{int(avail_mem)}G -jar -Dfile.encoding=UTF-8 {msfragger_exe_path} '
-                               f'{tmp_param_file.name} {raw_file}')
-                commands.append(command)
+            fasta_path = self.raw_fasta_inputbox.text()
+            raw_path = self.raw_inputbox.text()
+            n_threads = self.thread_spinbox.value()
+            msfragger_commands = get_msfragger_command(param_path=param_path, fasta_path=fasta_path, raw_path=raw_path, num_threads=n_threads)
+            commands += msfragger_commands
             self.psm_inputbox.setText(self.raw_inputbox.text())
             self.psm_fasta_inputbox.setText(self.raw_fasta_inputbox.text())
             self.psm_mzml_inputbox.setText(self.raw_inputbox.text())
