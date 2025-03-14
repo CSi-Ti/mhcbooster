@@ -1093,7 +1093,7 @@ class MhcBoosterWorker(QThread):
         for command in self.commands:
             if self._stop_flag:
                 break
-            self.process = subprocess.Popen(command.split(' '), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, env=env)
+            self.process = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, env=env)
             while True:
                 if self._stop_flag:
                     parent_process = psutil.Process(self.process.pid)
