@@ -13,7 +13,6 @@ def get_msfragger_command(param_path, fasta_path, raw_path, num_threads):
     print(f'Avail Memory = {avail_mem:.2f} GB')
     fasta_size = Path(fasta_path).stat().st_size / (1024 ** 2)
     split = int(fasta_size / avail_mem * 8)
-    print(f'Splitting fasta to {split} slices...')
 
     param_data = list(open(param_path).read().splitlines())
     param_data = [line for line in param_data if not line.startswith('database_name')
@@ -31,6 +30,7 @@ def get_msfragger_command(param_path, fasta_path, raw_path, num_threads):
         if raw_file.with_suffix('.pin').exists():
             continue
         if split > 1:
+            print(f'Splitting fasta to {split} slices...')
             command = (
                 f'python {msfragger_split_path} {split} "{java_exe_path} -Xmx{int(avail_mem)}G -jar -Dfile.encoding=UTF-8"'
                 f' {msfragger_exe_path} {tmp_param_file.name} {raw_file}')

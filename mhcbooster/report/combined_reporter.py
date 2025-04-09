@@ -226,16 +226,19 @@ class CombinedReporter:
                     proteins = sorted([protein for protein in protein_col[i].split(';') if len(protein.strip()) > 0])
                     if len(proteins) == 0:
                         continue
-                    row['protein'] = proteins[0]
-                    if row['protein'] in self.fasta_map.keys():
-                        row['protein_description'] = self.fasta_map[row['protein']]
-                        prot_desc_split = [t for t in self.fasta_map[row['protein']].split(' ') if t.startswith('GN=')]
-                        row['gene'] = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0][3:]
-                        row['gene'] = self.decoy_prefix + row['gene'] if row['protein'].startswith(self.decoy_prefix) else row['gene']
-                        prot_name_split = row['protein'].split('|')
+                    protein = proteins[0]
+                    protein_description = ''
+                    gene = ''
+                    protein_id, entry_name = '', ''
+                    if protein in self.fasta_map.keys():
+                        protein_description = self.fasta_map[protein]
+                        prot_desc_split = [t for t in protein_description.split(' ') if t.startswith('GN=')]
+                        gene = 'UNANNOTATED' if len(prot_desc_split) == 0 else prot_desc_split[0][3:]
+                        gene = self.decoy_prefix + gene if protein.startswith(self.decoy_prefix) else gene
+                        prot_name_split = protein.split('|')
                         if len(prot_name_split) == 3:
-                            row['protein_id'] = self.decoy_prefix + prot_name_split[1] if row['protein'].startswith(self.decoy_prefix) else prot_name_split[1]
-                            row['entry_name'] = self.decoy_prefix + prot_name_split[2] if row['protein'].startswith(self.decoy_prefix) else prot_name_split[2]
+                            protein_id = self.decoy_prefix + prot_name_split[1] if protein.startswith(self.decoy_prefix) else prot_name_split[1]
+                            entry_name = self.decoy_prefix + prot_name_split[2] if protein.startswith(self.decoy_prefix) else prot_name_split[2]
 
                     mapped_proteins = proteins[1:]
                     mapped_target_proteins = [protein_name for protein_name in mapped_proteins if not protein_name.startswith(self.decoy_prefix)]
@@ -249,8 +252,10 @@ class CombinedReporter:
                         gene_name = self.decoy_prefix + gene_name if mapped_protein.startswith(self.decoy_prefix) else gene_name
                         mapped_genes.append(gene_name)
                     mapped_genes = list(set(mapped_genes))
-                    row['mapped_protein'] = ','.join(mapped_proteins)
-                    row['mapped_gene'] = ','.join(mapped_genes)
+                    mapped_protein = ','.join(mapped_proteins)
+                    mapped_gene = ','.join(mapped_genes)
+                    result_df.loc[i, ['protein', 'protein_description', 'gene', 'protein_id', 'entry_name', 'mapped_protein', 'mapped_gene']] = \
+                        [protein, protein_description, gene, protein_id, entry_name, mapped_protein, mapped_gene]
             result_df.to_csv(result_path, sep='\t', index=False)
 
 
