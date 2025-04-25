@@ -273,10 +273,6 @@ def prepare_pin_features(data, use_features: Union[List[str], None]):
         for f in use_features:
             features[f] = data[f]
     else:
-        if 'rank' in data or 'Rank' in data:
-            if len(data['rank'].unique()) > 1:
-                raise NotImplementedError('Sorry, searches with more than one peptide hit per spectrum are not '
-                                          'yet supported.')
         do_not_use = ['SpecId', 'Label', 'ScanNr', 'Peptide', 'Proteins', 'FileName', 'ln(precursor_ppm)']
         to_use = [x for x in data.columns if x not in do_not_use]
         for feature in to_use:
@@ -286,6 +282,7 @@ def prepare_pin_features(data, use_features: Union[List[str], None]):
             if len(data[x].unique()) == 1:
                 features.drop(columns=[x], inplace=True)
 
+    features.reset_index(inplace=True, drop=False)
     return features
 
 

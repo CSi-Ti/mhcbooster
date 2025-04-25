@@ -186,7 +186,8 @@ class RunReporter:
         dist = fig.add_subplot(gs[0, 1])
         scores = self.psm_df['score']
         labels = self.psm_df['label']
-        _, bins, _ = dist.hist(scores[labels == 'Target'], label='Target', bins=30, alpha=0.5, color='g')
+        bins = np.arange(0, 1.025, 0.025)
+        dist.hist(scores[labels == 'Target'], label='Target', bins=bins, alpha=0.5, color='g')
         dist.hist(scores[labels == 'Decoy'], label='Decoy', bins=bins, alpha=0.5, zorder=100, color='r')
         dist.set_title('Prediction distributions')
         dist.set_xlabel('Target probability')

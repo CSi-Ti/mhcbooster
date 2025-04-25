@@ -15,15 +15,22 @@ def _extract_rt(spectrum):
 def _extract_mz(spectrum):
     precursor = spectrum['precursorList']['precursor'][0]
     precursor_mz = precursor['selectedIonList']['selectedIon'][0]['selected ion m/z']
-    lower_offset = precursor['isolationWindow']['isolation window lower offset']
-    upper_offset = precursor['isolationWindow']['isolation window upper offset']
+    if 'isolationWindow' in precursor.keys():
+        precursor_mz = precursor['isolationWindow']['isolation window target m/z'] #TODO
+        lower_offset = precursor['isolationWindow']['isolation window lower offset'] + 0.01
+        upper_offset = precursor['isolationWindow']['isolation window upper offset'] + 0.01
+    else:
+        lower_offset = 0.1
+        upper_offset = 0.1
     return precursor_mz, lower_offset, upper_offset
 
 def _extract_im_ms2(spectrum):
     mzs = spectrum['m/z array']
     ints = spectrum['intensity array']
     precursor = spectrum['precursorList']['precursor'][0]
-    ce = precursor['activation']['collision energy']
+    ce = 25
+    if 'collision energy' in precursor['activation'].keys():
+        ce = precursor['activation']['collision energy']
     im = 0
     if 'inverse reduced ion mobility' in precursor['selectedIonList']['selectedIon'][0].keys():
         im = precursor['selectedIonList']['selectedIon'][0]['inverse reduced ion mobility']
@@ -43,6 +50,20 @@ def _extract_im_ms2_msfragger(spectrum):
 
 
 def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
+    timsconvert_mzml = False
+    for line in open(mzml_path):
+        if line.strip().startswith('<software '):
+            if 'timsconvert' in line:
+                timsconvert_mzml = True
+        if line.strip() == '</softwareList>':
+            break
+    if timsconvert_mzml:
+        return get_rt_ccs_ms2_from_timsconvert_mzml(mzml_path, scan_nrs, masses, charges)
+    else:
+        return get_rt_ccs_ms2_from_msconvert_mzml(mzml_path, scan_nrs, masses, charges)
+
+
+def get_rt_ccs_ms2_from_msconvert_mzml(mzml_path, scan_nrs, masses, charges):
 
     target_mzs = masses / charges + PROTON_MASS
     mzml_file = mzml.read(mzml_path)
@@ -104,7 +125,13 @@ def get_rt_ccs_ms2_from_mzml(mzml_path, scan_nrs, masses, charges):
                 exp_intensities[i] = ints
                 break
         if not matched:
-            print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+            precursor_mz, lower_offset, upper_offset = _extract_mz(ms_list[scan_nr - 1])
+            print(f'WARNING: Spectrum not matched perfectly. peptide_mz: {target_mzs[i]}, precursor_mz:{precursor_mz}, lower_offset:{lower_offset}, upper_offset:{upper_offset}.')
+            im, ce, mzs, ints = _extract_im_ms2(ms_list[scan_nr - 1])
+            exp_ims[i] = im
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
 
     exp_rts = np.array(exp_rts)
     exp_ims = np.array(exp_ims)
@@ -178,7 +205,13 @@ def get_rt_ccs_ms2_from_timsconvert_mzml(mzml_path, scan_nrs, masses, charges):
                 exp_intensities[i] = ints
                 break
         if not matched:
-            print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+            precursor_mz, lower_offset, upper_offset = _extract_mz(ms_list[scan_nr - 1])
+            print(f'WARNING: Spectrum not matched perfectly. peptide_mz: {target_mzs[i]}, precursor_mz:{precursor_mz}, lower_offset:{lower_offset}, upper_offset:{upper_offset}.')
+            im, ce, mzs, ints = _extract_im_ms2(ms_list[scan_nr - 1])
+            exp_ims[i] = im
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
 
     exp_rts = np.array(exp_rts)
     exp_ims = np.array(exp_ims)
@@ -194,24 +227,28 @@ def get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, scan_nrs, masses, charges):
     target_mzs = masses / charges + PROTON_MASS
     mzml_file = mzml.read(mzml_path)
     scan_nrs = [str(nr) for nr in scan_nrs]
+    scan_nrs_unique = np.sort(np.unique(np.array(scan_nrs).astype(int))).astype(str)
+    scannr_idx_map = {}
     ms2_list = deque()
     scan_nr_idx = 0
     for data in tqdm(mzml_file, desc='Loading related MS2 spectrum to memory...'):
         tmp_scan_nr = data['spectrum title'].rsplit('.', 2)[-2]
-        if tmp_scan_nr == scan_nrs[scan_nr_idx]:
+        if tmp_scan_nr == scan_nrs_unique[scan_nr_idx]:
             ms2_list.append(data)
+            scannr_idx_map[tmp_scan_nr] = scan_nr_idx
             scan_nr_idx += 1
-            if scan_nr_idx == len(scan_nrs):
+            if scan_nr_idx == len(scan_nrs_unique):
                 break
     ms2_list = list(ms2_list)
-    assert len(ms2_list) == len(scan_nrs), 'Error in MSFragger uncalibrated mzML file reading...'
+    print(len(ms2_list), len(scan_nrs_unique))
+    assert len(ms2_list) == len(scan_nrs_unique), 'Error in MSFragger uncalibrated mzML file reading...'
     exp_rts = [None] * len(scan_nrs)
     exp_ims = [None] * len(scan_nrs)
     exp_mzs = [None] * len(scan_nrs)
     exp_intensities = [None] * len(scan_nrs)
     exp_ces = [None] * len(scan_nrs)
     for i, scan_nr in tqdm(enumerate(scan_nrs), total=len(scan_nrs), desc='Extracting RTs, CCSs, MS2s...'):
-        spectrum = ms2_list[i]
+        spectrum = ms2_list[scannr_idx_map[scan_nr]]
         target_rt = _extract_rt(spectrum)
         exp_rts[i] = target_rt
         precursor_mz, lower_offset, upper_offset = _extract_mz(spectrum)
@@ -222,7 +259,12 @@ def get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, scan_nrs, masses, charges):
             exp_mzs[i] = mzs
             exp_intensities[i] = ints
         else:
-            print('Spectrum not matched. IDK what\'s going on here. Interesting.')
+            print(f'WARNING: Spectrum not matched perfectly. peptide_mz: {target_mzs[i]}, precursor_mz:{precursor_mz}, lower_offset:{lower_offset}, upper_offset:{upper_offset}.')
+            im, ce, mzs, ints = _extract_im_ms2(spectrum)
+            exp_ims[i] = im
+            exp_ces[i] = ce
+            exp_mzs[i] = mzs
+            exp_intensities[i] = ints
 
     exp_rts = np.array(exp_rts)
     exp_ims = np.array(exp_ims)

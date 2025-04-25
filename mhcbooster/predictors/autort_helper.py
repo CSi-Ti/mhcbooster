@@ -92,10 +92,7 @@ class AutortHelper(BasePredictorHelper):
                 command = 'conda run -n autort --no-capture-output ' + command
                 print('Fine-tuning AutoRT. It may take several minutes...')
                 print(command)
-                if self.verbose:
-                    subprocess.run('source ~/.bashrc && ' + command, shell=True, executable='/bin/bash')
-                else:
-                    subprocess.run('source ~/.bashrc && ' + command, shell=True, executable='/bin/bash', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(command, shell=True)
                 self.model_path = fine_tuned_model_path / 'model.json'
 
         # Prepare file for prediction
@@ -111,10 +108,7 @@ class AutortHelper(BasePredictorHelper):
             command = 'conda run -n autort --no-capture-output ' + command
             print('Predicting RTs using AutoRT...')
             print(command)
-            if self.verbose:
-                subprocess.run('source ~/.bashrc && ' + command, shell=True, executable='/bin/bash')
-            else:
-                subprocess.run('source ~/.bashrc && ' + command, shell=True, executable='/bin/bash', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(command, shell=True)
             self.pred_df = pd.read_csv(str(result_file_path) + '.tsv', sep='\t')
 
         os.remove(input_file.name)

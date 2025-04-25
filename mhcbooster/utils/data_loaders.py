@@ -122,7 +122,7 @@ def load_pin_data(filepath: Union[str, Path],
     if len(df['Label'].unique()) == 2:
         apply_target_decoy_label_function(df,
                                           column='Label',
-                                          func=lambda x: 0 if int(x) == -1 else 1,
+                                          func=lambda x: 1 if int(x) == 1 else 0,
                                           in_place=True)
     else:
         print('INFO: The Label column in the PIN file is not properly formatted. Attempting to extract target/decoy '
@@ -396,8 +396,8 @@ def load_file(filename: Union[str, PathLike],
     if before != after:
         print(f"INFO: {before-after} PSMs were outside tolerable peptide lengths or contained uncommon amino acids "
               f"and were dropped.")
-
-    df['ScanNr'] = df['ScanNr'].astype(int)
-    df = df.sort_values(by='ScanNr')
+    if 'ScanNr' in df.columns:
+        df['ScanNr'] = df['ScanNr'].astype(int)
+        df = df.sort_values(by='ScanNr')
     df.reset_index(inplace=True, drop=True)
     return df

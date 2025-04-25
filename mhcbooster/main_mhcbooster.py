@@ -233,6 +233,9 @@ class MHCBooster:
         for col in self.raw_data.columns:
             if 'z=other' in col:
                 continue
+            if 'charge' == col.lower():
+                self.charges = self.raw_data[col].to_numpy(dtype=int)
+                continue
             if 'charge' in col.lower() or 'z=' in col:
                 self.charges[self.raw_data[col] == '1'] =  int(re.findall(r'\d+', col)[0])
 
@@ -248,6 +251,12 @@ class MHCBooster:
             qs = calculate_qs(self.raw_data['log10_evalue'].astype(float), self.labels, higher_better=False)
         elif 'ln(hyperscore)' in self.raw_data.columns:
             qs = calculate_qs(self.raw_data['ln(hyperscore)'].astype(float), self.labels, higher_better=True)
+        elif 'hyperscore' in self.raw_data.columns:
+            qs = calculate_qs(self.raw_data['hyperscore'].astype(float), self.labels, higher_better=True)
+        elif 'Final_Score' in self.raw_data.columns:
+            qs = calculate_qs(self.raw_data['Final_Score'].astype(float), self.labels, higher_better=False)
+        elif 'qvalue' in self.raw_data.columns:
+            qs = calculate_qs(self.raw_data['qvalue'].astype(float), self.labels, higher_better=False)
         else:
             qs = None
             print('lnExpect or log10_evalue score cannot be found from input files. Processing without calibration!')
@@ -295,9 +304,15 @@ class MHCBooster:
             ('MS2' not in predictor_types or self.exp_ms2s is not None) and \
             ('CCS' not in predictor_types or self.exp_ims is not None):
             return
-        if predictor_types == ['RT'] and 'retentiontime' in self.raw_data:
+        if 'retentiontime' in self.raw_data.columns:
             self.exp_rts = self.raw_data['retentiontime'].astype(float)
-        else:
+        if 'RT' in self.raw_data.columns:
+            self.exp_rts = self.raw_data['RT'].astype(float)
+        if 'IM' in self.raw_data.columns:
+            self.exp_ims = self.raw_data['IM'].astype(float)
+        if ('RT' in predictor_types and self.exp_rts is None) or \
+                ('MS2' in predictor_types and self.exp_ms2s is None) or \
+                ('CCS' in predictor_types and self.exp_ims is None):
             assert self.mzml_folder is not None, f'mzML folder must be provided for {predictor_types} scores'
             mzml_paths = Path(self.mzml_folder).rglob('*.mzML')
             mzml_map = {path.stem.replace('_uncalibrated', ''): str(path.expanduser().resolve()) for path in mzml_paths}
@@ -309,11 +324,6 @@ class MHCBooster:
                 self.exp_rts, self.exp_ims, self.exp_ms2s = \
                     get_rt_ccs_ms2_from_msfragger_mzml(mzml_path, self.raw_data['ScanNr'],
                                                        self.raw_data['ExpMass'].astype(float), self.charges)
-            # Sage - timsconvert
-            elif 'ln(hyperscore)' in self.raw_data.columns:
-                self.exp_rts, self.exp_ims, self.exp_ms2s = \
-                    get_rt_ccs_ms2_from_timsconvert_mzml(mzml_path, self.raw_data['ScanNr'],
-                                             self.raw_data['ExpMass'].astype(float), self.charges)
             else:
                 self.exp_rts, self.exp_ims, self.exp_ms2s = \
                     get_rt_ccs_ms2_from_mzml(mzml_path, self.raw_data['ScanNr'],
@@ -667,13 +677,16 @@ class MHCBooster:
             if len(self.ccs_predictors) > 0:
                 predictor_types.append('CCS')
                 self.ccs_predictors = [p.lower() for p in self.ccs_predictors]
+
             self.load_psm_coordinates(predictor_types=predictor_types)
-            
+            if self.exp_ims is None or np.any(self.exp_ims == None) or np.max(self.exp_ims) <= 0:
+                self.ccs_predictors = []
+
             if 'autort' in self.rt_predictors:
                 self.add_autort_predictions()
             if 'deeplc' in self.rt_predictors:
                 self.add_deeplc_predictions()
-            if 'im2deep' in self.ccs_predictors and self.fine_tune and np.max(self.exp_ims) > 0:
+            if 'im2deep' in self.ccs_predictors and self.fine_tune:
                 self.add_im2deep_predictions()
 
             self.koina_predictors = []
@@ -681,13 +694,16 @@ class MHCBooster:
                 if predictor not in ['autort', 'deeplc']:
                     self.koina_predictors.append(predictor)
             self.koina_predictors += self.ms2_predictors
-            if self.exp_ims is not None and np.max(self.exp_ims) > 0:
-                for predictor in self.ccs_predictors:
-                    if predictor == 'im2deep' and self.fine_tune:
-                        continue
-                    self.koina_predictors.append(predictor)
+            for predictor in self.ccs_predictors:
+                if predictor == 'im2deep' and self.fine_tune:
+                    continue
+                self.koina_predictors.append(predictor)
             if len(self.koina_predictors) > 0:
                 self.add_koina_predictions()
+
+        features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
+        features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
+        features_all.to_csv(report_directory / 'features.tsv', index=False, sep='\t')
 
         # Initialize training model
         if not sequence_encoding:
@@ -847,10 +863,6 @@ class MHCBooster:
         print(f' | Peptides validated at 1% FDR: {np.sum((pep_qvalue <= 0.01) & (pep_labels == 1))}')
         print(f' | Sequences validated at 1% FDR: {np.sum((seq_qvalue <= 0.01) & (seq_labels == 1))}')
         print('===================================')
-
-        features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
-        features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
-        features_all.to_csv(report_directory / 'features.tsv', index=False, sep='\t')
 
         run_reporter = RunReporter(report_directory, Path(self.filename).stem, self.decoy_tag)
         run_reporter.add_run_result(peptides=self.peptides_with_mods, sequences=self.peptides,
