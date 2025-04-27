@@ -96,6 +96,9 @@ class CombinedReporter:
             Path(pep_xml_path).unlink(missing_ok=True)
 
         # Generate sequence-protein map from prot.xml
+        if not (self.result_folder / 'combined.prot.xml').exists():
+            print('Protein inference is skipped.')
+            return pd.DataFrame()
         prot_data = list(protxml.read(str(self.result_folder / 'combined.prot.xml')))
         seq_prot_map = {}
         for prot in prot_data:
@@ -290,6 +293,8 @@ class CombinedReporter:
             result_df = pd.read_csv(result_path, sep='\t')
             fdr_col = [col for col in result_df.columns if '_qvalue' in col][0]
             result_df = result_df[(result_df['label'] == 'Target') * (result_df[fdr_col] <= fdr)]
+            if not pd.api.types.is_string_dtype(result_df['charge']):
+                result_df['charge'] = result_df['charge'].astype(str)
 
             cols_to_drop = set(result_df.columns) & {'label', 'score', 'min_rank', fdr_col}
             cols_to_drop |= {col for col in result_df.columns if '_binder' in col}
