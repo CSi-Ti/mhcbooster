@@ -2,7 +2,7 @@ import numpy as np
 from collections import Counter
 
 
-def calculate_qs(metrics, labels, higher_better: bool = True):
+def calculate_qs_old(metrics, labels, higher_better: bool = True):
     metrics = np.array(metrics)
     labels = np.array(labels)
     ordered_idx = np.argsort(metrics)
@@ -40,6 +40,28 @@ def calculate_qs(metrics, labels, higher_better: bool = True):
             N_decoys -= decoy_counts[sorted_metrics[i]]
     return qs
 
+def calculate_qs(metrics, labels, higher_better: bool = True):
+    metrics = np.array(metrics)
+    labels = np.array(labels)
+    ordered_idx = np.argsort(metrics)
+    if higher_better:
+        ordered_idx = np.flip(ordered_idx)
+    sorted_labels = labels[ordered_idx]
+
+    cumulative_targets = np.cumsum(sorted_labels == 1)
+    cumulative_decoys = np.cumsum(sorted_labels == 0)
+    if cumulative_decoys[-1] > 0:
+        cumulative_decoys[cumulative_decoys == 0] = 1
+    cumulative_targets[cumulative_targets == 0] = cumulative_decoys[cumulative_targets == 0]
+    sorted_fdr = cumulative_decoys / cumulative_targets
+
+    sorted_qs = np.minimum.accumulate(sorted_fdr[::-1])[::-1]
+    sorted_qs[sorted_qs == 0] = 0
+    qs = np.ones_like(metrics, dtype=float)
+    for i in range(len(sorted_qs)):
+        qs[ordered_idx[i]] = sorted_qs[i]
+
+    return qs
 
 def calculate_roc(qs,
                   labels,

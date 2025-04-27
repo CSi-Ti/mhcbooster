@@ -241,7 +241,7 @@ class MHCBooster:
 
         # High prob indices
         self.high_prob_indices = None
-        qs_threshold = 0.0001
+        qs_threshold = 0.001
         max_qs_threshold = 0.01
         min_points = 100
 
@@ -268,7 +268,7 @@ class MHCBooster:
             else:
                 tmp_qs_threshold = np.sort(qs)[min_points]
                 if tmp_qs_threshold < max_qs_threshold:
-                    self.high_prob_indices = qs < tmp_qs_threshold
+                    self.high_prob_indices = qs <= tmp_qs_threshold
                     print(f'Not enough PSMs for calibration. Relaxed the high confidence q-value threshold to {tmp_qs_threshold}')
                 else:
                     print('Not enough PSMs for calibration. Processing without calibration!')
