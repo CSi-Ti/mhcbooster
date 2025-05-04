@@ -8,7 +8,6 @@ import pandas as pd
 from pathlib import Path
 from copy import deepcopy
 from pyteomics import fasta, protxml
-from pyteomics.mass import calculate_mass
 
 class CombinedReporter:
 
@@ -30,6 +29,7 @@ class CombinedReporter:
 
         self.fasta_map = None
         self.seq_prot_df = None
+        self.combined_high_confidence_sequences = None
 
     def prepare_fasta_map(self):
         # Prepare fasta: some sequences are missing in prot.xml
@@ -46,42 +46,6 @@ class CombinedReporter:
     def do_protein_inference(self):
         if self.fasta_path is None:
             return pd.DataFrame()
-        ### Read PSMs from psm.tsv and generate pep.xml
-        for psm_path in self.result_folder.rglob('psm.tsv'):
-            psm_df = pd.read_csv(psm_path, sep='\t')
-            header = ['<?xml version="1.0" encoding="UTF-8"?>\n',
-                      '<?xml-stylesheet type="text/xsl" href="pepXML_std.xsl"?>\n',
-                      '<msms_pipeline_analysis xmlns="http://regis-web.systemsbiology.net/pepXML" xsi:schemaLocation="http://sashimi.sourceforge.net/schema_revision/pepXML/pepXML_v122.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n',
-                      '<analysis_summary analysis="MHCBooster">\n',
-                      '</analysis_summary>\n',
-                      '<msms_run_summary>\n']
-
-            with open(psm_path.parent / 'peptide.pep.xml', 'w') as pep_xml:
-                pep_xml.writelines(header)
-                pep_xml.write('<search_summary>\n')
-                pep_xml.write(f'<search_database local_path="{self.fasta_path}" type="AA"/>\n')
-                pep_xml.write(f'</search_summary>\n')
-
-                for i, psm in psm_df.iterrows():
-                    sequence = psm['sequence']
-                    charge = psm['charge']
-                    proteins = [protein for protein in psm['protein'].split(';') if len(protein.strip()) > 0]
-                    score = psm['score']
-
-                    pep_xml.write(f'<spectrum_query assumed_charge="{charge}" spectrum="{i}">\n')
-                    pep_xml.write('<search_result>\n')
-                    pep_xml.write(f'<search_hit peptide="{sequence}" calc_neutral_pep_mass="{calculate_mass(sequence)}" num_tot_proteins="{len(proteins)}" protein="{proteins[0]}">\n')
-                    for i in range(1, len(proteins)):
-                        pep_xml.write(f'<alternative_protein protein="{proteins[i]}"/>\n')
-                    pep_xml.write('<analysis_result analysis="peptideprophet">\n')
-                    pep_xml.write(f'<peptideprophet_result probability="{score}" all_ntt_prob="({score},{score},{score})">\n')
-                    pep_xml.write('</peptideprophet_result>\n')
-                    pep_xml.write('</analysis_result>\n')
-                    pep_xml.write('</search_hit>\n')
-                    pep_xml.write('</search_result>\n')
-                    pep_xml.write('</spectrum_query>\n')
-                pep_xml.write('</msms_run_summary>\n')
-                pep_xml.write('</msms_pipeline_analysis>\n')
 
         ### Run ProteinProphet
         pep_xml_paths = [path.absolute().as_posix() for path in self.result_folder.rglob('peptide.pep.xml')]
@@ -92,8 +56,7 @@ class CombinedReporter:
             subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=self.result_folder, shell=True)
             subprocess.run(f'{philosopher_exe_path} proteinprophet --maxppmdiff 2000000 --output combined {pep_xml_list.name}', cwd=self.result_folder, shell=True)
             subprocess.run(f'{philosopher_exe_path} workspace --clean --nocheck', cwd=self.result_folder, shell=True)
-        for pep_xml_path in pep_xml_paths:
-            Path(pep_xml_path).unlink(missing_ok=True)
+
 
         # Generate sequence-protein map from prot.xml
         if not (self.result_folder / 'combined.prot.xml').exists():
@@ -332,8 +295,43 @@ class CombinedReporter:
             combined_df[col] = combined_df[col].astype('Int64')
         cols = list(combined_df.columns[:13]) + spectral_count_cols + binder_cols + allele_cols
         combined_df = combined_df[cols]
+
+        combined_len = len(combined_df)
+        combined_df = combined_df[combined_df['sequence'].isin(self.combined_high_confidence_sequences)]
+        print(f'Saving {len(combined_df)} {group_key}s to combined_{group_key}.tsv ({combined_len} before filtering)')
         combined_df.to_csv(self.result_folder / f'combined_{group_key}.tsv', sep='\t', index=False)
         print('Done.')
+
+
+    def get_philosopher_reference(self):
+        peptide_paths = list(self.result_folder.rglob('peptide.pep.xml'))
+        if self.fasta_path is None or len(peptide_paths) == 0:
+            return
+        philosopher_exe_path = Path(__file__).parent.parent / 'third_party' / 'philosopher_v5.1.0_linux_amd64' / 'philosopher'
+        for peptide_path in peptide_paths:
+            sample_path = peptide_path.parent
+            subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=sample_path, shell=True)
+            subprocess.run(f'{philosopher_exe_path} database --annotate {self.fasta_path}', cwd=sample_path, shell=True)
+            subprocess.run(f'{philosopher_exe_path} filter --sequential --prot 1 --pep {self.pep_fdr} --tag rev_ --pepxml peptide.pep.xml --protxml ../combined.prot.xml --razor', cwd=sample_path, shell=True)
+
+        pepxml_paths = ' '.join([str(path) for path in peptide_paths])
+        sample_names = ' '.join([path.parent.name for path in peptide_paths])
+        subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=self.result_folder, shell=True)
+        subprocess.run(f'{philosopher_exe_path} iprophet --decoy rev_ --nonsp --output combined {pepxml_paths}', cwd=self.result_folder, shell=True)
+        subprocess.run(f'{philosopher_exe_path} abacus --razor --reprint --tag rev_ --protein --peptide {sample_names}', cwd=self.result_folder, shell=True)
+
+        for peptide_path in peptide_paths:
+            sample_path = peptide_path.parent
+            subprocess.run(f'{philosopher_exe_path} workspace --clean --nocheck', cwd=sample_path, shell=True)
+        subprocess.run(f'{philosopher_exe_path} workspace --clean --nocheck', cwd=self.result_folder, shell=True)
+        try:
+            reference_df = pd.read_csv(self.result_folder / 'combined_peptide.tsv', sep='\t')
+            if 'Sequence' in reference_df.columns:
+                self.combined_high_confidence_sequences = reference_df['Sequence'].to_numpy()
+        except FileNotFoundError:
+            print('Failed to generate the combined peptide list using Philosopher.')
+            return
+
 
     def run(self):
 
@@ -349,6 +347,7 @@ class CombinedReporter:
             self.remove_contaminants('peptide.tsv')
             self.remove_contaminants('sequence.tsv')
 
+        self.get_philosopher_reference()
         self.combine_result('peptide.tsv')
         self.combine_result('sequence.tsv')
 

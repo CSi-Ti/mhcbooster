@@ -9,6 +9,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.cm import get_cmap
 from mhcbooster.utils.fdr import calculate_qs, calculate_peptide_level_qs, calculate_roc
 from mhcnames import normalize_allele_name
+from pyteomics.mass import calculate_mass
 
 class RunReporter:
 
@@ -88,6 +89,45 @@ class RunReporter:
         self.psm_df = pd.merge(self.psm_df, app_df, on='sequence', how='left')
 
 
+    def generate_pep_xml(self, fasta_path):
+        header = ['<?xml version="1.0" encoding="UTF-8"?>\n',
+                  '<?xml-stylesheet type="text/xsl" href="pepXML_std.xsl"?>\n',
+                  '<msms_pipeline_analysis xmlns="http://regis-web.systemsbiology.net/pepXML" xsi:schemaLocation="http://sashimi.sourceforge.net/schema_revision/pepXML/pepXML_v122.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n',
+                  '<analysis_summary analysis="MHCBooster">\n',
+                  '</analysis_summary>\n',
+                  f'<msms_run_summary base_name="{self.file_name}">\n']
+
+        with open(self.report_directory / 'peptide.pep.xml', 'w') as pep_xml:
+            pep_xml.writelines(header)
+            pep_xml.write('<search_summary>\n')
+            pep_xml.write(f'<search_database local_path="{fasta_path}" type="AA"/>\n')
+            pep_xml.write(f'</search_summary>\n')
+
+            for i, psm in self.psm_df.iterrows():
+                sequence = psm['sequence']
+                charge = psm['charge']
+                proteins = [protein for protein in psm['protein'].split(';') if len(protein.strip()) > 0]
+                score = psm['score']
+
+                spectrum_id = self.file_name + '.' + str(i + 1) + '.' + str(i + 1) + '.' + str(charge)
+                pep_xml.write(f'<spectrum_query assumed_charge="{charge}" spectrum="{spectrum_id}">\n')
+                pep_xml.write('<search_result>\n')
+                pep_xml.write(
+                    f'<search_hit peptide="{sequence}" calc_neutral_pep_mass="{calculate_mass(sequence)}" num_tot_proteins="{len(proteins)}" hit_rank="1" protein="{proteins[0]}">\n')
+                for i in range(1, len(proteins)):
+                    pep_xml.write(f'<alternative_protein protein="{proteins[i]}"/>\n')
+                pep_xml.write('<analysis_result analysis="peptideprophet">\n')
+                pep_xml.write(
+                    f'<peptideprophet_result probability="{score}" all_ntt_prob="({score},{score},{score})">\n')
+                pep_xml.write('</peptideprophet_result>\n')
+                pep_xml.write('</analysis_result>\n')
+                pep_xml.write('</search_hit>\n')
+                pep_xml.write('</search_result>\n')
+                pep_xml.write('</spectrum_query>\n')
+            pep_xml.write('</msms_run_summary>\n')
+            pep_xml.write('</msms_pipeline_analysis>\n')
+
+
     def generate_psm_report(self, psm_fdr=1, remove_decoy=False):
         if remove_decoy:
             psm_df = self.psm_df[self.psm_df['label'] == 'Target']
@@ -98,11 +138,14 @@ class RunReporter:
         return psm_df
 
 
-    def generate_peptide_report(self, pep_fdr=1, remove_decoy=False):
-        if remove_decoy:
-            psm_df = self.psm_df[self.psm_df['label'] == 'Target']
+    def generate_peptide_report(self, pep_fdr=1, remove_decoy=False, sequential=False, psm_fdr=1):
+        if sequential:
+            psm_df = self.psm_df[self.psm_df['psm_qvalue'] <= psm_fdr]
         else:
             psm_df = self.psm_df
+        if remove_decoy:
+            psm_df = psm_df[psm_df['label'] == 'Target']
+
         psm_df = psm_df[psm_df['pep_qvalue'] <= pep_fdr]
         agg_dict = {
             'sequence': 'first',
@@ -131,11 +174,14 @@ class RunReporter:
         return self.peptide_df
 
 
-    def generate_sequence_report(self, seq_fdr=1, remove_decoy=False):
-        if remove_decoy:
-            psm_df = self.psm_df[self.psm_df['label'] == 'Target']
+    def generate_sequence_report(self, seq_fdr=1, remove_decoy=False, sequential=False, psm_fdr=1):
+        if sequential:
+            psm_df = self.psm_df[self.psm_df['psm_qvalue'] <= psm_fdr]
         else:
             psm_df = self.psm_df
+        if remove_decoy:
+            psm_df = psm_df[psm_df['label'] == 'Target']
+
         psm_df = psm_df[psm_df['seq_qvalue'] <= seq_fdr]
         agg_dict = {
             'peptide': lambda x: ','.join(set(x)),
@@ -216,19 +262,19 @@ class RunReporter:
 
 
 if __name__ == '__main__':
-    psm_df = pd.read_csv('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552/psm.tsv', sep='\t')
-    run_reporter = RunReporter(report_directory='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/Search_0226_test/JY_Class1_25M_DDA_60min_Slot1-12_1_552',
+    psm_df = pd.read_csv('/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/human_yeast/mhcbooster_oldk_seq/JY_Class1_25M_DDA_60min_Slot1-12_1_552_MHCBooster/psm.tsv', sep='\t')
+    run_reporter = RunReporter(report_directory='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/human_yeast/mhcbooster_oldk_seq/JY_Class1_25M_DDA_60min_Slot1-12_1_552_MHCBooster',
                                file_name='test', decoy_prefix='rev_')
-    psm_df = pd.read_csv('/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0305/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster/psm.tsv', sep='\t')
-    run_reporter = RunReporter(report_directory='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0306/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster',
-                               file_name='test', decoy_prefix='rev_')
+    # psm_df = pd.read_csv('/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0305/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster/psm.tsv', sep='\t')
+    # run_reporter = RunReporter(report_directory='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0306/JY_MHC1_T1_F1_iRT_DDA_Slot1-2_1_782_MHCBooster',
+    #                            file_name='test', decoy_prefix='rev_')
     # psm_df['protein_id'] = ''
     # psm_df['entry_name'] = ''
     # psm_df['protein_description'] = ''
     # psm_df['mapped_protein'] = ''
     run_reporter.psm_df = psm_df
-    run_reporter.add_app_score()
+    # run_reporter.add_app_score()
     # run_reporter.infer_protein('/mnt/d/data/Library/2025-02-26-decoys-contam-JY_var_splicing_0226.fasta.fas')
     # run_reporter.generate_psm_report()
-    run_reporter.generate_peptide_report()
-    run_reporter.generate_sequence_report()
+    run_reporter.generate_peptide_report(pep_fdr=0.01, remove_decoy=True, sequential=True, psm_fdr=0.01)
+    # run_reporter.generate_sequence_report()
