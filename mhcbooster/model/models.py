@@ -117,7 +117,10 @@ def get_model_without_peptide_encoding(ms_feature_length: int, max_pep_length: i
     input = keras.Input(shape=(ms_feature_length,))
     x = layers.BatchNormalization(input_shape=(ms_feature_length,))(input)
     for i in range(hidden_layers):
-        x = layers.Dense(n_nodes, activation=tf.nn.relu)(x)
+        # x = layers.Dense(n_nodes, activation=tf.nn.relu)(x)
+        x = layers.Dense(n_nodes, use_bias=False)(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.ReLU()(x)
         x = layers.Dropout(dropout)(x)
     output = layers.Dense(1, activation=tf.nn.sigmoid)(x)
 
@@ -136,3 +139,15 @@ def reset_weights(model):
       # find the corresponding variable
       var = getattr(layer, k.replace("_initializer", ""))
       var.assign(initializer(var.shape, var.dtype))
+
+
+def focal_loss(gamma=2.0, alpha=0.25):
+    def loss(y_true, y_pred):
+
+        epsilon = tf.keras.backend.epsilon()
+        y_pred = tf.clip_by_value(y_pred, epsilon, 1. - epsilon)
+
+        pt = tf.where(tf.equal(y_true, 1), y_pred, 1 - y_pred)
+        loss = -alpha * tf.pow(1. - pt, gamma) * tf.math.log(pt)
+        return tf.reduce_mean(loss)
+    return loss

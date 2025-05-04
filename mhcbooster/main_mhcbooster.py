@@ -30,7 +30,7 @@ from mhcbooster.predictors.koina_helper import KoinaHelper, general_koina_predic
 from mhcbooster.predictors.auto_model_predictor import predict_best_combination
 from mhcbooster.utils.fdr import calculate_qs, calculate_peptide_level_qs
 from mhcflurry.encodable_sequences import EncodableSequences
-from mhcbooster.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding
+from mhcbooster.model.models import get_model_without_peptide_encoding, get_model_with_peptide_encoding, focal_loss
 from mhcbooster.utils.peptide import remove_previous_and_next_aa, get_previous_and_next_aa, remove_charge, \
     remove_modifications
 from mhcbooster.model.nd_standard_scalar import NDStandardScaler
@@ -519,8 +519,7 @@ class MHCBooster:
                      dropout: float = 0.5,
                      hidden_layers: int = 2,
                      width_ratio: float = 5.0,
-                     loss_fn=tf.losses.BinaryCrossentropy()
-                     ):
+                     alpha: float = 0.5):
         """
         Return a compiled multilayer perceptron neural network with the indicated architecture.
 
@@ -528,7 +527,7 @@ class MHCBooster:
         :param dropout: Dropout between each layer.
         :param hidden_layers: Number of hidden layers.
         :param width_ratio: Ratio of width of hidden layers to width of input layer.
-        :param loss_fn: The loss function to use.
+        :param alpha: Ratio of decoy to target
         :return: A compiled keras.Model
         """
 
@@ -538,7 +537,7 @@ class MHCBooster:
                                                    hidden_layers=hidden_layers,
                                                    max_pep_length=self.max_len,
                                                    width_ratio=width_ratio)
-        model.compile(loss=loss_fn, optimizer=optimizer)
+        model.compile(loss=focal_loss(gamma=0, alpha=alpha), optimizer=optimizer)
 
         return model
 
@@ -552,7 +551,7 @@ class MHCBooster:
                                             n_filters: int = 12,
                                             filter_stride: int = 3,
                                             n_encoded_sequence_features: int = 6,
-                                            loss_fn=tf.losses.BinaryCrossentropy()):
+                                            alpha: float = 0.5):
         """
         Return a compiled neural network, similar to get_nn_model but also includes a convolutional network for
         encoding peptide sequences which feeds into the multilayer perceptron.
@@ -566,7 +565,7 @@ class MHCBooster:
         :param n_filters: Number of filters.
         :param filter_stride: Filter stride.
         :param n_encoded_sequence_features: Number of nodes in the output of the convolutional network.
-        :param loss_fn: The loss function to use.
+        :param alpha: Ratio of decoy to target
         :return: A compiled keras.Model
         """
         optimizer = keras.optimizers.Adam(learning_rate=learning_rate)
@@ -582,7 +581,7 @@ class MHCBooster:
                                                 n_encoded_sequence_features=n_encoded_sequence_features,
                                                 max_pep_length=max_len
                                                 )
-        model.compile(optimizer=optimizer, loss=loss_fn)
+        model.compile(optimizer=optimizer, loss=focal_loss(gamma=0, alpha=alpha))
         return model
 
 
@@ -604,6 +603,7 @@ class MHCBooster:
             fine_tune: bool = False,
             sequence_encoding: bool = False,
             mzml_folder: PathLike = None,
+            fasta_path: PathLike = None,
             psm_fdr: float = 1,
             pep_fdr: float = 1,
             seq_fdr: float = 1,
@@ -649,6 +649,10 @@ class MHCBooster:
             self.rt_predictors, self.ms2_predictors = predict_best_combination(self.feature_matrix)
             self.ccs_predictors = ['im2deep', 'alphapeptdeep_ccs_generic']
 
+            features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
+            features_all = features_all[[col for col in features_all.columns if '_right' not in col]]
+            features_all.to_csv(report_directory / 'all_features.tsv', index=False, sep='\t')
+
             drop_columns = []
             for column in self.feature_matrix.columns:
                 if column.endswith('_log_rt_error'):
@@ -665,6 +669,8 @@ class MHCBooster:
                         drop_columns.append(predictor + '_cosine_score')
                         drop_columns.append(predictor + '_forward_score')
                         drop_columns.append(predictor + '_reverse_score')
+                        drop_columns.append(predictor + '_entropy_b_score')
+                        drop_columns.append(predictor + '_entropy_y_score')
             self.feature_matrix.drop(drop_columns, axis=1, inplace=True)
         else:
             predictor_types = []
@@ -706,14 +712,18 @@ class MHCBooster:
         features_all.to_csv(report_directory / 'features.tsv', index=False, sep='\t')
 
         # Initialize training model
+        alpha = np.sum(self.labels != 1) / np.sum(self.labels == 1)
+        alpha = max(0.1, min(alpha, 0.9))
         if not sequence_encoding:
             model_args = {key: arg for key, arg in kwargs.items() if key in signature(self.get_nn_model).parameters}
             kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
+            model_args['alpha'] = alpha
             model = self.get_nn_model(**model_args)
         else:
             model_args = {key: arg for key, arg in kwargs.items() if key in
                           signature(self.get_nn_model_with_sequence_encoding).parameters}
             kwargs = {key: arg for key, arg in kwargs.items() if key not in model_args}
+            model_args['alpha'] = alpha
             model = self.get_nn_model_with_sequence_encoding(**model_args)
             if self.encoded_peptides is None:
                 self.encode_peptide_sequences()
@@ -731,7 +741,7 @@ class MHCBooster:
         labels = deepcopy(self.labels)
         peptides = self.peptides
 
-        skf = k_fold_split(s=self.raw_data['ExpMass'].to_numpy(dtype=float), k_folds=n_splits, random_state=random_seed)
+        skf = k_fold_split(s=self.raw_data['ExpMass'].to_numpy(dtype=float), peptides=peptides, k_folds=n_splits, random_state=random_seed)
 
         predictions = np.zeros_like(labels, dtype=float)
         k_splits = np.zeros_like(labels, dtype=int)
@@ -786,11 +796,9 @@ class MHCBooster:
 
                 x2_train = input_scalar2.transform(x2_train)
                 x2_test = input_scalar2.transform(x2_test)
-                additional_training_data = input_scalar2.transform(additional_training_data)
 
                 x_train = (x_train, x2_train)
                 x_predict = (x_predict, x2_test)
-                x = (x, additional_training_data)
 
             model_fit_parameters = eval(f'signature(model.fit)').parameters
             if 'validation_data' in model_fit_parameters.keys():
@@ -822,8 +830,7 @@ class MHCBooster:
 
             # Train the model
             if fit_model:
-                fit_history = eval(f"model.fit(x_train, train_labels, "
-                                   f"{val_str} {weight_str} {callbacks_str} **kwargs)")
+                fit_history = eval(f"model.fit(x_train, train_labels, {val_str} {weight_str} {callbacks_str} **kwargs)")
                 if model_name != '':
                     model.load_weights(model_name)
                     if report_directory is not None:
@@ -871,9 +878,10 @@ class MHCBooster:
                                     charges=self.charges, scores=self.predictions,
                                     proteins=self.raw_data['Proteins'].str.replace('@', '', regex=False))
         run_reporter.add_app_score()
+        run_reporter.generate_pep_xml(fasta_path=fasta_path)
         run_reporter.generate_psm_report(psm_fdr=psm_fdr, remove_decoy=remove_decoy)
-        run_reporter.generate_peptide_report(pep_fdr=pep_fdr, remove_decoy=remove_decoy)
-        run_reporter.generate_sequence_report(seq_fdr=seq_fdr, remove_decoy=remove_decoy)
+        run_reporter.generate_peptide_report(pep_fdr=pep_fdr, remove_decoy=remove_decoy, sequential=True, psm_fdr=psm_fdr)
+        run_reporter.generate_sequence_report(seq_fdr=seq_fdr, remove_decoy=remove_decoy, sequential=True, psm_fdr=psm_fdr)
         run_reporter.draw_result_figure([h.history['val_loss'] for h in history])
 
 
@@ -888,15 +896,16 @@ def run_mhcbooster(pin_files, sequence_encoding, alleles, mhc_class, app_predict
         mhcb.set_mhc_params(alleles=alleles, mhc_class=mhc_class)
         mhcb.load_data(pin, filetype='pin')
         mhcb.run(sequence_encoding=sequence_encoding,
-                      app_predictors=app_predictors,
-                      auto_predict_predictor=auto_predict_predictor,
-                      rt_predictors=rt_predictors,
-                      ms2_predictors=ms2_predictors,
-                      ccs_predictors=ccs_predictors,
-                      fine_tune=fine_tune,
-                      n_splits=5,
-                      mzml_folder=mzml_folder,
-                      report_directory=output_folder / f'{file_name}')
+                 app_predictors=app_predictors,
+                 auto_predict_predictor=auto_predict_predictor,
+                 rt_predictors=rt_predictors,
+                 ms2_predictors=ms2_predictors,
+                 ccs_predictors=ccs_predictors,
+                 fine_tune=fine_tune,
+                 n_splits=3,
+                 mzml_folder=mzml_folder,
+                 fasta_path=fasta_path,
+                 report_directory=output_folder / f'{file_name}')
 
         if auto_predict_predictor:
             rt_predictors = mhcb.rt_predictors
