@@ -175,7 +175,7 @@ training.add_argument('-v',
 training.add_argument('-k',
                       '--k_folds',
                       type=int,
-                      default=5,
+                      default=3,
                       help='The number of splits used in training and predictions, as in K-fold cross-validation.')
 
 training.add_argument('-s',
