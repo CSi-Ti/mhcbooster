@@ -33,7 +33,7 @@ def _pred_best_combination(score_matrix, predictor_type=None, max_predictors=4):
 
 def predict_best_combination(feature_matrix):
     rt_scores = feature_matrix[[col for col in feature_matrix.columns if 'log_rt_error' in col and 'Chronologer' not in col]]
-    ms2_scores = feature_matrix[[col for col in feature_matrix.columns if 'entropy' in col]]
+    ms2_scores = feature_matrix[[col for col in feature_matrix.columns if 'entropy_score' in col]]
 
     rt_predictors = _pred_best_combination(rt_scores, predictor_type='RT')
     ms2_predictors = _pred_best_combination(ms2_scores, predictor_type='MS2')

@@ -51,14 +51,15 @@ class BasePredictorHelper:
                         mz_tolerance: float, use_ppm: bool, predictor_name: str = None) -> pd.DataFrame:
         from numba.typed import List
         assert len(exp_spectra_df) == len(pred_spectra_df)
-        exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr = List(), List(), List(), List()
+        exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, pred_anno_arr = List(), List(), List(), List(), List()
         exp_mzs_arr.extend([np.array(mzs, dtype=np.float32) for mzs in exp_spectra_df['mzs']])
         exp_ints_arr.extend([np.array(ints, dtype=np.float32) for ints in exp_spectra_df['intensities']])
         pred_mzs_arr.extend([np.array(mzs, dtype=np.float32) for mzs in pred_spectra_df['mzs']])
         pred_ints_arr.extend([np.array(ints, dtype=np.float32) for ints in pred_spectra_df['intensities']])
+        pred_anno_arr.extend([np.array(anno, dtype=np.int32) for anno in pred_spectra_df['annotations']])
 
-        entropy_scores, cosine_scores, forward_scores, reverse_scores = (
-            calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, mz_tolerance, use_ppm))
+        entropy_scores, cosine_scores, forward_scores, reverse_scores, entropy_b_scores, entropy_y_scores = (
+            calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, pred_anno_arr, mz_tolerance, use_ppm))
 
         predictions = pd.DataFrame()
         if predictor_name is None:
@@ -66,11 +67,15 @@ class BasePredictorHelper:
             predictions[f'{self.predictor_name}_cosine_score'] = cosine_scores
             predictions[f'{self.predictor_name}_forward_score'] = forward_scores
             predictions[f'{self.predictor_name}_reverse_score'] = reverse_scores
+            predictions[f'{self.predictor_name}_entropy_b_score'] = entropy_b_scores
+            predictions[f'{self.predictor_name}_entropy_y_score'] = entropy_y_scores
         else:
             predictions[f'{predictor_name}_entropy_score'] = entropy_scores
             predictions[f'{predictor_name}_cosine_score'] = cosine_scores
             predictions[f'{predictor_name}_forward_score'] = forward_scores
             predictions[f'{predictor_name}_reverse_score'] = reverse_scores
+            predictions[f'{predictor_name}_entropy_b_score'] = entropy_b_scores
+            predictions[f'{predictor_name}_entropy_y_score'] = entropy_y_scores
         return predictions
 
     def calc_ms2_scores_combine(self, exp_spectra_df: pd.DataFrame, pred_spectra_df: pd.DataFrame,

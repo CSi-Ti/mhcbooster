@@ -1,3 +1,4 @@
+import re
 import time
 import numpy as np
 import pandas as pd
@@ -195,12 +196,26 @@ class KoinaHelper(BasePredictorHelper):
                 elif predictor_type == 'MS2':
                     combined_pred_df[f'{predictor_name}_mzs'] = pred_df['mzs']
                     combined_pred_df[f'{predictor_name}_intensities'] = pred_df['intensities']
+                    combined_pred_df[f'{predictor_name}_annotations'] = pred_df['annotation']
 
         self.pred_df = combined_pred_df
 
         return self.pred_df
 
     def score_df(self) -> pd.DataFrame:
+
+        def convert_anno(anno):
+            anno = anno.decode('utf8')
+            match = re.match(r'([by])(\d+)', anno)
+            if match:
+                prefix = match.group(1)
+                num = int(match.group(2))
+                if prefix == 'b' and num >= 3:
+                    return -1
+                elif prefix == 'y' and num >= 3:
+                    return 1
+            return 0
+
         all_predictions = pd.DataFrame()
         for predictor_type in self.predictor_map.keys():
             for predictor_name in self.predictor_map[predictor_type]:
@@ -224,6 +239,9 @@ class KoinaHelper(BasePredictorHelper):
                     pred_ms2 = pd.DataFrame()
                     pred_ms2['mzs'] = self.pred_df[f'{predictor_name}_mzs']
                     pred_ms2['intensities'] = self.pred_df[f'{predictor_name}_intensities']
+                    pred_ms2['annotations'] = self.pred_df[f'{predictor_name}_annotations']
+                    pred_ms2['annotations'] = pred_ms2['annotations'].apply(lambda x: [convert_anno(a) for a in x])
+
                     predictions = self.calc_ms2_scores(self.exp_ms2s, pred_ms2, self.mz_tolerance, self.use_ppm, predictor_name)
                     all_predictions = all_predictions.join(predictions, how='outer')
 

@@ -110,13 +110,15 @@ def calc_forward_reverse(exp_len, pred_len, matched_len):
     return forward_score, reverse_score
 
 @numba.njit(parallel=True)
-def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, mz_tolerance, use_ppm):
+def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, pred_anno_arr, mz_tolerance, use_ppm):
     assert len(exp_mzs_arr) == len(pred_mzs_arr)
     n = len(exp_mzs_arr)
     entropy_scores = np.zeros(n, dtype=np.float32)
     cosine_scores = np.zeros(n, dtype=np.float32)
     forward_scores = np.zeros(n, dtype=np.float32)
     reverse_scores = np.zeros(n, dtype=np.float32)
+    entropy_b_scores = np.zeros(n, dtype=np.float32)
+    entropy_y_scores = np.zeros(n, dtype=np.float32)
 
     for i in numba.prange(n):  # Parallel loop
         i = int(i)
@@ -124,6 +126,7 @@ def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, 
         exp_ints = exp_ints_arr[i]
         pred_mzs = pred_mzs_arr[i]
         pred_ints = pred_ints_arr[i]
+        pred_annos = pred_anno_arr[i]
 
         # Sort experimental data
         exp_indices = np.argsort(exp_mzs)
@@ -135,6 +138,7 @@ def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, 
         pred_indices = np.argsort(pred_mzs)
         pred_mzs = pred_mzs[pred_indices]
         pred_ints = pred_ints[pred_indices]
+        pred_annos = pred_annos[pred_indices]
 
         # Match spectra
         matched_exp_ints = match_spectra_to_pred(exp_mzs, exp_ints, pred_mzs, mz_tolerance, use_ppm)
@@ -145,12 +149,21 @@ def calc_all_ms2_scores(exp_mzs_arr, exp_ints_arr, pred_mzs_arr, pred_ints_arr, 
         n_matched = np.sum(matched_exp_ints > 0)
         forward_scores[i], reverse_scores[i] = calc_forward_reverse(len(exp_mzs), len(pred_mzs), n_matched)
 
+        matched_b_exp_ints = matched_exp_ints[pred_annos == -1]
+        matched_y_exp_ints = matched_exp_ints[pred_annos == 1]
+        pred_b_ints = pred_ints[pred_annos == -1]
+        pred_y_ints = pred_ints[pred_annos == 1]
+        entropy_b_scores[i] = calc_spectral_entropy(matched_b_exp_ints, pred_b_ints)
+        entropy_y_scores[i] = calc_spectral_entropy(matched_y_exp_ints, pred_y_ints)
+
     entropy_scores = np.clip(entropy_scores, a_min=EPSILON, a_max=None)
     cosine_scores = np.clip(cosine_scores, a_min=EPSILON, a_max=None)
     forward_scores = np.clip(forward_scores, a_min=EPSILON, a_max=None)
     reverse_scores = np.clip(reverse_scores, a_min=EPSILON, a_max=None)
+    entropy_b_scores = np.clip(entropy_b_scores, a_min=EPSILON, a_max=None)
+    entropy_y_scores = np.clip(entropy_y_scores, a_min=EPSILON, a_max=None)
 
-    return entropy_scores, cosine_scores, forward_scores, reverse_scores
+    return entropy_scores, cosine_scores, forward_scores, reverse_scores, entropy_b_scores, entropy_y_scores
 
 
 if __name__ == '__main__':
