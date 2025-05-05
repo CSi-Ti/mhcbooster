@@ -405,32 +405,36 @@ class MhcBoosterGUI(QWidget):
         self.seq_fdr_spinbox.setRange(0.000001, 1)
         self.seq_fdr_spinbox.setValue(0.01)
         self.seq_fdr_spinbox.setSingleStep(0.01)
+        self.cfdr_checkbox = QCheckBox('Control combine FDR')
+
         fdr_layout = QHBoxLayout()
-        fdr_layout.setSpacing(35)
+        fdr_layout.setSpacing(20)
         psm_fdr_layout = QHBoxLayout()
-        psm_fdr_layout.setSpacing(5)
+        psm_fdr_layout.setSpacing(2)
         psm_fdr_layout.addWidget(psm_fdr_label)
         psm_fdr_layout.addWidget(self.psm_fdr_spinbox)
         pep_fdr_layout = QHBoxLayout()
-        pep_fdr_layout.setSpacing(5)
+        pep_fdr_layout.setSpacing(2)
         pep_fdr_layout.addWidget(pep_fdr_label)
         pep_fdr_layout.addWidget(self.pep_fdr_spinbox)
-        prot_fdr_layout = QHBoxLayout()
-        prot_fdr_layout.setSpacing(5)
-        prot_fdr_layout.addWidget(seq_fdr_label)
-        prot_fdr_layout.addWidget(self.seq_fdr_spinbox)
+        seq_fdr_layout = QHBoxLayout()
+        seq_fdr_layout.setSpacing(2)
+        seq_fdr_layout.addWidget(seq_fdr_label)
+        seq_fdr_layout.addWidget(self.seq_fdr_spinbox)
         fdr_layout.addLayout(psm_fdr_layout)
         fdr_layout.addLayout(pep_fdr_layout)
-        fdr_layout.addLayout(prot_fdr_layout)
-        fdr_layout.addSpacing(30)
+        fdr_layout.addLayout(seq_fdr_layout)
+        fdr_layout.addWidget(self.cfdr_checkbox)
+        fdr_layout.addSpacing(10)
         p2_layout.addLayout(fdr_layout)
 
         # Koina
         koina_label = QLabel('Koina server URL: ')
         self.koina_inputbox = QLineEdit('koina.wilhelmlab.org:443')
+        self.koina_inputbox.setFixedWidth(150)
         p2_layout.addWidget(koina_label)
         p2_layout.addWidget(self.koina_inputbox)
-        p2_layout.addSpacing(30)
+        p2_layout.addSpacing(10)
 
         # Max thread
         self.thread_label = QLabel('Threads: ')
@@ -857,6 +861,7 @@ class MhcBoosterGUI(QWidget):
         psm_fdr = self.psm_fdr_spinbox.value()
         pep_fdr = self.pep_fdr_spinbox.value()
         seq_fdr = self.seq_fdr_spinbox.value()
+        cfdr = self.cfdr_checkbox.isChecked()
         koina_server_url = self.koina_inputbox.text()
         n_threads = self.thread_spinbox.value()
 
@@ -933,6 +938,8 @@ class MhcBoosterGUI(QWidget):
             command += f' --pep_fdr {pep_fdr}'
         if seq_fdr is not None:
             command += f' --seq_fdr {seq_fdr}'
+        if cfdr:
+            command += f' --control_combine_fdr'
         if len(koina_server_url) > 0:
             command += f' --koina_server_url {koina_server_url}'
         command += f' --input {psm_folder} --output_dir {output_folder}'
@@ -1012,6 +1019,7 @@ class MhcBoosterGUI(QWidget):
         settings.setValue('psm_fdr_spinbox', self.psm_fdr_spinbox.value())
         settings.setValue('pep_fdr_spinbox', self.pep_fdr_spinbox.value())
         settings.setValue('seq_fdr_spinbox', self.seq_fdr_spinbox.value())
+        settings.setValue('cfdr_checkbox', self.cfdr_checkbox.isChecked())
         settings.setValue('koina_inputbox', self.koina_inputbox.text())
         settings.setValue('thread_spinbox', self.thread_spinbox.value())
                 
@@ -1073,6 +1081,7 @@ class MhcBoosterGUI(QWidget):
         self.psm_fdr_spinbox.setValue(float(settings.value('psm_fdr_spinbox')))
         self.pep_fdr_spinbox.setValue(float(settings.value('pep_fdr_spinbox')))
         self.seq_fdr_spinbox.setValue(float(settings.value('seq_fdr_spinbox')))
+        self.cfdr_checkbox.setChecked(settings.value('cfdr_checkbox') == 'true')
         self.koina_inputbox.setText(settings.value('koina_inputbox'))
         self.thread_spinbox.setValue(int(settings.value('thread_spinbox')))
 

@@ -218,6 +218,11 @@ reporter.add_argument('--seq_fdr',
                            'Sequences with higher FDR values '
                            'will be filtered out in the result of each run and the combined result.')
 
+reporter.add_argument('--control_combine_fdr',
+                      action='store_true',
+                      help='Run iProphet and Abacus in Philosopher to control FDR when combining results from multiple runs.'
+                           'This step will skip if pep_fdr does not equal to 0.01.')
+
 def run():
     args = parser.parse_args()
 
@@ -288,7 +293,8 @@ def run():
                                          pep_fdr=args.pep_fdr, seq_fdr=args.seq_fdr,
                                          infer_protein=args.infer_protein,
                                          decoy_prefix=args.decoy_prefix,
-                                         remove_contaminant=args.remove_contaminant)
+                                         remove_contaminant=args.remove_contaminant,
+                                         control_combine_fdr=args.control_combine_fdr)
     combined_reporter.run()
 
 if __name__ == '__main__':

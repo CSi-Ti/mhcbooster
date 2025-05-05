@@ -12,7 +12,7 @@ from pyteomics import fasta, protxml
 class CombinedReporter:
 
     def __init__(self, result_folder, fasta_path, pep_fdr=0.01, seq_fdr=0.01, infer_protein=True,
-                 decoy_prefix = 'rev_', remove_contaminant=False):
+                 decoy_prefix = 'rev_', remove_contaminant=False, control_combine_fdr=False):
 
         self.result_folder = Path(result_folder)
         self.fasta_path = fasta_path
@@ -21,6 +21,7 @@ class CombinedReporter:
         self.infer_protein = infer_protein
         self.decoy_prefix = decoy_prefix
         self.remove_contaminant = remove_contaminant
+        self.control_combine_fdr = control_combine_fdr
 
         if self.fasta_path is None:
             fasta_paths = list(self.result_folder.glob('*.fasta')) + list(self.result_folder.glob('*.fas'))
@@ -350,7 +351,8 @@ class CombinedReporter:
             self.remove_contaminants('peptide.tsv')
             self.remove_contaminants('sequence.tsv')
 
-        self.get_philosopher_reference()
+        if self.control_combine_fdr:
+            self.get_philosopher_reference()
         self.combine_result('peptide.tsv')
         self.combine_result('sequence.tsv')
 
