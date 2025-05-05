@@ -296,23 +296,26 @@ class CombinedReporter:
         cols = list(combined_df.columns[:13]) + spectral_count_cols + binder_cols + allele_cols
         combined_df = combined_df[cols]
 
-        combined_len = len(combined_df)
-        combined_df = combined_df[combined_df['sequence'].isin(self.combined_high_confidence_sequences)]
-        print(f'Saving {len(combined_df)} {group_key}s to combined_{group_key}.tsv ({combined_len} before filtering)')
+        if self.combined_high_confidence_sequences is not None:
+            combined_len = len(combined_df)
+            combined_df = combined_df[combined_df['sequence'].isin(self.combined_high_confidence_sequences)]
+            print(f'Saving {len(combined_df)} {group_key}s to combined_{group_key}.tsv ({combined_len} before filtering)')
+        else:
+            print(f'Saving {len(combined_df)} {group_key}s to combined_{group_key}.tsv')
         combined_df.to_csv(self.result_folder / f'combined_{group_key}.tsv', sep='\t', index=False)
         print('Done.')
 
 
     def get_philosopher_reference(self):
         peptide_paths = list(self.result_folder.rglob('peptide.pep.xml'))
-        if self.fasta_path is None or len(peptide_paths) == 0:
+        if self.fasta_path is None or len(peptide_paths) == 0 or self.pep_fdr != 0.01:
             return
         philosopher_exe_path = Path(__file__).parent.parent / 'third_party' / 'philosopher_v5.1.0_linux_amd64' / 'philosopher'
         for peptide_path in peptide_paths:
             sample_path = peptide_path.parent
             subprocess.run(f'{philosopher_exe_path} workspace --init', cwd=sample_path, shell=True)
             subprocess.run(f'{philosopher_exe_path} database --annotate {self.fasta_path}', cwd=sample_path, shell=True)
-            subprocess.run(f'{philosopher_exe_path} filter --sequential --prot 1 --pep {self.pep_fdr} --tag rev_ --pepxml peptide.pep.xml --protxml ../combined.prot.xml --razor', cwd=sample_path, shell=True)
+            subprocess.run(f'{philosopher_exe_path} filter --sequential --prot 1 --pep 0.01 --tag rev_ --pepxml peptide.pep.xml --protxml ../combined.prot.xml --razor', cwd=sample_path, shell=True)
 
         pepxml_paths = ' '.join([str(path) for path in peptide_paths])
         sample_names = ' '.join([path.parent.name for path in peptide_paths])
@@ -353,8 +356,8 @@ class CombinedReporter:
 
 
 if __name__ == '__main__':
-    combined_reporter = CombinedReporter(result_folder='/mnt/d/data/JY_Fractionation_Replicate_1/mhcbooster_0307_copy',
-                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta',
+    combined_reporter = CombinedReporter(result_folder='/mnt/d/workspace/mhc-booster/experiment/JY_1_10_25M/human_yeast/test_nonorm_specificity',
+                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95_Yeast.fasta',
                                          infer_protein=False,
-                                         remove_contaminant=True)
+                                         remove_contaminant=False)
     combined_reporter.run()
