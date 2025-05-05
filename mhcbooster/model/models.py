@@ -117,10 +117,7 @@ def get_model_without_peptide_encoding(ms_feature_length: int, max_pep_length: i
     input = keras.Input(shape=(ms_feature_length,))
     x = layers.BatchNormalization(input_shape=(ms_feature_length,))(input)
     for i in range(hidden_layers):
-        # x = layers.Dense(n_nodes, activation=tf.nn.relu)(x)
-        x = layers.Dense(n_nodes, use_bias=False)(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.ReLU()(x)
+        x = layers.Dense(n_nodes, activation=tf.nn.relu)(x)
         x = layers.Dropout(dropout)(x)
     output = layers.Dense(1, activation=tf.nn.sigmoid)(x)
 
