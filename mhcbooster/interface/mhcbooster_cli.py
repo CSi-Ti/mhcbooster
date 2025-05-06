@@ -221,10 +221,13 @@ reporter.add_argument('--seq_fdr',
 reporter.add_argument('--control_combine_fdr',
                       action='store_true',
                       help='Run iProphet and Abacus in Philosopher to control FDR when combining results from multiple runs.'
-                           'This step will skip if pep_fdr does not equal to 0.01.')
+                           'This step will be skipped if pep_fdr does not equal to 0.01.')
 
 def run():
     args = parser.parse_args()
+
+    if args.fasta_path is not None:
+        args.fasta_path = str(Path(args.fasta_path).resolve())
 
     input_files = args.input
     if len(input_files) == 1 and os.path.isdir(input_files[0]):
@@ -267,20 +270,21 @@ def run():
                     file_delimiter=args.delimiter)
 
         mhcb.run(sequence_encoding=args.encode_peptide_sequences,
-              app_predictors=args.app_predictors,
-              rt_predictors=args.rt_predictors,
-              ms2_predictors=args.ms2_predictors,
-              ccs_predictors=args.ccs_predictors,
-              auto_predict_predictor=args.auto_pred,
-              fine_tune=args.fine_tune,
-              mzml_folder=args.mzml_dir,
-              report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MHCBooster',
-              n_splits=args.k_folds,
-              verbose=args.verbose_training,
-              psm_fdr=args.psm_fdr,
-              pep_fdr=args.pep_fdr,
-              seq_fdr=args.seq_fdr,
-              remove_decoy=args.remove_decoy)
+                 app_predictors=args.app_predictors,
+                 rt_predictors=args.rt_predictors,
+                 ms2_predictors=args.ms2_predictors,
+                 ccs_predictors=args.ccs_predictors,
+                 auto_predict_predictor=args.auto_pred,
+                 fine_tune=args.fine_tune,
+                 mzml_folder=args.mzml_dir,
+                 report_directory=Path(args.output_dir) / f'{Path(input_file).stem}_MHCBooster',
+                 n_splits=args.k_folds,
+                 verbose=args.verbose_training,
+                 psm_fdr=args.psm_fdr,
+                 pep_fdr=args.pep_fdr,
+                 seq_fdr=args.seq_fdr,
+                 remove_decoy=args.remove_decoy,
+                 fasta_path=args.fasta_path)
 
         if args.auto_pred:
             args.rt_predictors = mhcb.rt_predictors
