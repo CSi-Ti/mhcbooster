@@ -13,7 +13,7 @@ def k_fold_split(s: np.array,
         random_state: np.random.RandomState = np.random.RandomState(random_state)
     else:
         random_state: np.random.RandomState = random_state
-    # get the number of counts of each peptide sequence
+    # get the counts of each peptide sequence
     peptide_counts = Counter(peptides)
 
     unique_peptide_indices = []

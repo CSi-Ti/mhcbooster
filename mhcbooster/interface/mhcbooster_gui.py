@@ -358,6 +358,7 @@ class MhcBoosterGUI(QWidget):
 
         # Protein Inference
         self.pi_checkbox = QCheckBox('Protein Inference')
+        self.pi_checkbox.setChecked(True)
         p1_layout.addWidget(self.pi_checkbox)
         p1_layout.addSpacing(30)
 
@@ -406,9 +407,10 @@ class MhcBoosterGUI(QWidget):
         self.seq_fdr_spinbox.setValue(0.01)
         self.seq_fdr_spinbox.setSingleStep(0.01)
         self.cfdr_checkbox = QCheckBox('Control combine FDR')
+        self.cfdr_checkbox.setChecked(True)
 
         fdr_layout = QHBoxLayout()
-        fdr_layout.setSpacing(20)
+        fdr_layout.setSpacing(15)
         psm_fdr_layout = QHBoxLayout()
         psm_fdr_layout.setSpacing(2)
         psm_fdr_layout.addWidget(psm_fdr_label)
@@ -431,7 +433,7 @@ class MhcBoosterGUI(QWidget):
         # Koina
         koina_label = QLabel('Koina server URL: ')
         self.koina_inputbox = QLineEdit('koina.wilhelmlab.org:443')
-        self.koina_inputbox.setFixedWidth(150)
+        self.koina_inputbox.setFixedWidth(160)
         p2_layout.addWidget(koina_label)
         p2_layout.addWidget(self.koina_inputbox)
         p2_layout.addSpacing(10)
