@@ -89,7 +89,7 @@ class AutortHelper(BasePredictorHelper):
 
                 fine_tuned_model_path = self.autort_root / 'models' / 'fine_tuned_model'
                 command = f'python {autort_exe_path} train -i {train_file.name} -m {self.model_path} -o {fine_tuned_model_path} -rlr'
-                command = 'conda run -n autort --no-capture-output ' + command
+                command = 'source ~/.bashrc; conda run -n autort --no-capture-output ' + command
                 print('Fine-tuning AutoRT. It may take several minutes...')
                 print(command)
                 subprocess.run(command, shell=True)
@@ -105,7 +105,7 @@ class AutortHelper(BasePredictorHelper):
         with tempfile.NamedTemporaryFile('w', delete=False) as result_file:
             result_file_path = Path(result_file.name)
             command = f'python {autort_exe_path} predict -t {input_file.name} -s {self.model_path} -o {result_file_path.parent} -p {result_file_path.stem}'
-            command = 'conda run -n autort --no-capture-output ' + command
+            command = 'source ~/.bashrc; conda run -n autort --no-capture-output ' + command
             print('Predicting RTs using AutoRT...')
             print(command)
             subprocess.run(command, shell=True)

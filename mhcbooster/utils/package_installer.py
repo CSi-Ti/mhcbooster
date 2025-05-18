@@ -30,7 +30,7 @@ def install_autort(path):
         zip_ref.extractall(target_folder)
 
     env_exist = False
-    output = subprocess.check_output(["conda", "info", "--json"], text=True)
+    output = subprocess.check_output('source ~/.bashrc; conda info --json', text=True, shell=True)
     data = json.loads(output)
     env_paths = data.get("envs", [])
     for env_path in env_paths:
@@ -40,7 +40,7 @@ def install_autort(path):
             break
     if not env_exist:
         print('Installing conda environment of AutoRT...')
-        subprocess.run('conda create -n autort python==3.8 -y && conda run -n autort pip install tensorflow==2.6.0 keras==2.6.0 matplotlib pandas scikit-learn numpy psutil protobuf==3.19.6', shell=True)
+        subprocess.run('source ~/.bashrc; conda create -n autort python==3.8 -y && conda run -n autort pip install tensorflow==2.6.0 keras==2.6.0 matplotlib pandas scikit-learn numpy psutil protobuf==3.19.6', shell=True)
     print('AutoRT installed to {}'.format(target_folder))
 
 
