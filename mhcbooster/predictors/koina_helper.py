@@ -112,7 +112,9 @@ class KoinaHelper(BasePredictorHelper):
         self.peptides_with_mods = peptides_with_mods
         self.koina_server_url = koina_server_url
 
-        self.high_prob_indices = high_prob_indices if np.sum(high_prob_indices) > 0 else None
+        self.high_prob_indices = high_prob_indices
+        if np.sum(high_prob_indices) == 0:
+            self.high_prob_indices = None
 
 
     def _predict_rt(self):
