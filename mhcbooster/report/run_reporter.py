@@ -83,7 +83,7 @@ class RunReporter:
                 app_df['best_allele'] = np.where(app_df['min_rank'] == app_df['min_rank_left'], app_df['best_allele_left'], app_df['best_allele_right'])
                 app_df.drop(columns=['min_rank_left', 'min_rank_right', 'best_allele_left', 'best_allele_right'], inplace=True)
         if 'best_allele' in app_df.columns:
-            app_df['best_allele'] = app_df['best_allele'].apply(lambda a: normalize_allele_name(a.replace('__', '-')))
+            app_df['best_allele'] = app_df['best_allele'].apply(lambda a: normalize_allele_name(a.replace('__', '-')) if a != '' else a)
             app_df['binder'] = (app_df[[col for col in app_df.columns if '_binder' in col]]
                                 .apply(lambda b: 'Strong' if 'Strong' in b.values else ('Weak' if 'Weak' in b.values else 'Non-binder'), axis=1))
         self.psm_df = pd.merge(self.psm_df, app_df, on='sequence', how='left')
