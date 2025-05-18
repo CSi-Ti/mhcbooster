@@ -106,6 +106,8 @@ def install_mixmhc2pred(path):
     print('Installing MixMHC2pred...')
     with zipfile.ZipFile(path, 'r') as zip_ref:
         zip_ref.extractall(target_folder/'MixMHC2pred-2.0')
+        exe_path = str(target_folder/'MixMHC2pred-2.0'/'MixMHC2pred_unix')
+        subprocess.run(f'chmod +x {exe_path}', shell=True)
         print('MixMHC2pred installed to {}'.format(target_folder))
 
 def install():
