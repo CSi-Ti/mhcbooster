@@ -131,10 +131,11 @@ class BasePredictorHelper:
         min_pred, max_pred = np.min(pred_array), np.max(pred_array)
         if min_exp == max_exp or min_pred == max_pred:
             return pred_array if full_pred_array is None else full_pred_array
-        k_1, b_1 = (max_exp - min_exp) / (max_pred - min_pred), (max_exp + min_exp) / 3
-        k_2, b_2 = (max_exp - min_exp) / (max_pred - min_pred), -(max_exp + min_exp) / 3
-        below_1 = exp_array <= (pred_array * k_1 + b_1)
-        above_2 = exp_array >= (pred_array * k_2 + b_2)
+        k = (max_exp - min_exp) / (max_pred - min_pred)
+        b = (max_exp + min_exp) / 2 - (max_pred + min_pred) / 2 * k
+        m = (max_exp - min_exp) / 2
+        below_1 = exp_array <= (pred_array * k + b + m)
+        above_2 = exp_array >= (pred_array * k + b - m)
         mask = below_1 * above_2
         pred_array = pred_array[mask]
         exp_array = exp_array[mask]
