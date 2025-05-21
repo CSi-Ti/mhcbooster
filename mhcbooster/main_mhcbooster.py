@@ -261,7 +261,7 @@ class MHCBooster:
             qs = None
             print('lnExpect or log10_evalue score cannot be found from input files. Processing without calibration!')
 
-        if qs is not None:
+        if qs is not None and len(qs) > min_points:
             high_prob_indices = qs < qs_threshold
             if np.sum(high_prob_indices) >= min_points:
                 self.high_prob_indices = high_prob_indices
