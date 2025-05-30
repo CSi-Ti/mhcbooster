@@ -73,6 +73,9 @@ def calculate_roc(qs,
     qs = qs[sort_idx]
     qs, counts = np.unique(qs, return_counts=True) # Counter(qs)
 
+    qs = np.insert(qs, 0, 0)
+    counts = np.insert(counts, 0, 0)
+
     N = 0
     n_psms = np.empty_like(qs, dtype=float)
 
