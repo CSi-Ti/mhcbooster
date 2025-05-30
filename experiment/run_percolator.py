@@ -3,8 +3,9 @@ import os
 from pathlib import Path
 from os import system
 
-pin_files = Path('/mnt/d/data/JY_500M/fragpipe/Search_0204').rglob('*.pin')
-output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/JY_500M/percolator/')
+pin_files = Path('/mnt/d/data/RA_Fractionation/Search_0523').rglob('*.pin')
+output_folder = Path('/mnt/d/workspace/mhc-booster/experiment/RA_Fractionation/percolator')
+
 if not os.path.exists(output_folder):
     os.makedirs(output_folder)
 
@@ -18,4 +19,4 @@ for pin in pin_files:
     pep_target_out = output_folder / (file_name + '_pep_target.pout')
     pep_decoy_out = output_folder / (file_name + '_pep_decoy.pout')
     # system(f'percolator -r {pep_target_out} -B {pep_decoy_out} -m {psm_target_out} -M {psm_decoy_out} {pin}')
-    system(f'percolator -r {pep_target_out} {pin}')
+    system(f'percolator -r {pep_target_out} -m {psm_target_out} {pin}')

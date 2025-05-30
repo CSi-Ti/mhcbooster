@@ -6,14 +6,13 @@ import numpy as np
 import pandas as pd
 from pyteomics.parser import length
 
-from src.utils.peptide import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
-from src.predictors.netmhcpan_helper import NetMHCpanHelper
+from mhcbooster.utils.peptide import replace_uncommon_aas, remove_charge, remove_previous_and_next_aa, remove_modifications
+from mhcbooster.predictors.netmhcpan_helper import NetMHCpanHelper
 
 N_THREADS = os.cpu_count() // 2
-# N_THREADS = 1
 
 ALLELES = ['HLA-A0201', 'HLA-B0702', 'HLA-C0702']
-ALLELES = ['HLA-A0101', 'HLA-A0202', 'HLA-B5701', 'HLA-B4403', 'HLA-C0602', 'HLA-C1602']
+# ALLELES = ['HLA-A0101', 'HLA-A0202', 'HLA-B5701', 'HLA-B4403', 'HLA-C0602', 'HLA-C1602']
 # ALLELES = ['HLA-A0101', 'HLA-A2415', 'HLA-B5701', 'HLA-C0602']
 # ALLELES = ['HLA-A0301', 'HLA-A6802', 'HLA-B0702', 'HLA-B1402', 'HLA-C0702', 'HLA-C0802']
 
@@ -87,6 +86,8 @@ def _base_eval_pep(folder, pep_file_suffix, sep, pep_col, qvalue_col, label_col=
     paths.sort()
     result_stat = pd.DataFrame(columns=['File name', 'Peptides', 'Peptides (filtered)', 'Strong binders', 'Weak binders', 'Non-binders', 'Binder percent'])
     for i, path in enumerate(paths):
+        if path.name == 'combined_peptide.tsv':
+            continue
         filename = path.stem
         if length(list(open(path))) == 0:
             pep_df = []
@@ -175,24 +176,14 @@ def eval_ms2rescore(folder):
 def eval_mhcvalidator(folder):
     _base_eval_pep(folder, pep_file_suffix='.MhcValidator_annotated.tsv', sep='\t', pep_col='Peptide', qvalue_col='mhcv_pep-level_q-value', label_col='mhcv_label', target_label=1, mod_col=None)
 
+def eval_mhcbooster(folder):
+    _base_eval_pep(folder, pep_file_suffix='peptide.tsv', sep='\t', pep_col='peptide', qvalue_col='pep_qvalue', label_col='label', target_label='Target', mod_col=None)
+
 
 if __name__ == '__main__':
-    # eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/percolator')
-    # eval_ms2rescore(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/ms2rescore')
-    # eval_ms2rescore(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/ms2rescore')
-    # eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/JPST002044/auto')
 
-    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/percolator')
-    eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/fragpipe')
-    eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/MSV000091456/A375_lowInput_IP/HLA-I/mhcbooster')
-
-    # eval_mhcvalidator(folder='./JY_1_10_25M/1205_2rt_1ccs_2ms2_kfm')
-    # eval_mhcvalidator(folder='./JY_1_10_25M/netmhcpan')
-    # eval_mhcvalidator(folder='./JY_1_10_25M/mhcflurry')
-    # eval_mhcvalidator(folder='./PXD019643/0_HPC_HLA_I/mhcbooster/')
-    # eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/PXD038782/HLA-I/mhcb_auto322')
-    # eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/PXD019643/auto_pred_align')
-    # eval_percolator(folder='/mnt/d/workspace/mhc-validator-2/experiment/PXD007635/HLA-II/percolator/')
-    # eval_mhcvalidator(folder='/mnt/d/workspace/mhc-validator-2/experiment/PXD007635/HLA-II/all/')
-    # eval_percolator(folder='./PXD019643/0_HPC_HLA_I/msbooster/')
-    # eval_percolator(folder='./PXD052187/percolator_no')
+    eval_percolator(folder='/mnt/d/workspace/mhc-booster/experiment/JPST002044/dda/percolator')
+    eval_ms2rescore(folder='/mnt/d/workspace/mhc-booster/experiment/JPST002044/dda/ms2rescore')
+    eval_percolator(folder='/mnt/d/workspace/mhc-booster/experiment/JPST002044/dda/fragpipe')
+    eval_mhcvalidator(folder='/mnt/d/workspace/mhc-booster/experiment/JPST002044/dda/mhcvalidator')
+    eval_mhcbooster(folder='/mnt/d/workspace/mhc-booster/experiment/JPST002044/dda/mhcbooster')
