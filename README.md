@@ -19,10 +19,10 @@ MHCBooster features a graphical user interface and is also available via command
 conda create -n mhcbooster python==3.10
 
 # install MHCBooster
-pip install mhcbooster
+pip install mhcbooster==2.1.2
 
 
-# WSL
+# WSL (Ubuntu 20.04)
 sudo apt update
 sudo apt install libxcb-xinerama0 libxcb-cursor0 libx11-xcb1 qt5-qmake qtbase5-dev qtchooser qtbase5-dev-tools   # GUI
 sudo apt install tcsh    # NetMHCpan env
