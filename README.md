@@ -55,12 +55,12 @@ confirming successful installation.
 1. Download the packages manually.
 ```text
 # Download links
-MSFragger: https://msfragger-upgrader.nesvilab.org/upgrader/
-AutoRT: https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip
-BigMHC: https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip
-NetMHCpan: https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux
-NetMHCIIpan: https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCIIpan&version=4.3&packageversion=4.3e&platform=Linux
-MixMHC2pred: https://github.com/GfellerLab/MixMHC2pred/releases/download/v2.0.2.2/MixMHC2pred-2.0.zip
+MSFragger (MSFragger-4.1.zip): https://msfragger-upgrader.nesvilab.org/upgrader/
+AutoRT (AutoRT-master.zip): https://github.com/bzhanglab/AutoRT/archive/refs/heads/master.zip
+BigMHC (bigmhc-master.zip): https://github.com/KarchinLab/bigmhc/archive/refs/heads/master.zip
+NetMHCpan (netMHCpan-4.1b.Linux.tar.gz): https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCpan&version=4.1&packageversion=4.1b&platform=Linux
+NetMHCIIpan (netMHCIIpan-4.3e.Linux.tar.gz): https://services.healthtech.dtu.dk/cgi-bin/sw_request?software=netMHCIIpan&version=4.3&packageversion=4.3e&platform=Linux
+MixMHC2pred (MixMHC2pred-2.0.zip): https://github.com/GfellerLab/MixMHC2pred/releases/download/v2.0.2.2/MixMHC2pred-2.0.zip
 
 # Note: Please download these packages with a browser.
 #       Downloading by scripts will lead to wrong file names and could not be identified by package-installer.
