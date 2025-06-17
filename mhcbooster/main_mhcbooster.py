@@ -646,7 +646,7 @@ class MHCBooster:
         if self.auto_predict_predictor:
             self.load_psm_coordinates()
             self.add_all_predictors()
-            self.rt_predictors, self.ms2_predictors = predict_best_combination(self.feature_matrix)
+            self.rt_predictors, self.ms2_predictors = predict_best_combination(self.feature_matrix, report_directory)
             self.ccs_predictors = ['im2deep', 'alphapeptdeep_ccs_generic']
 
             features_all = self.raw_data.join(self.feature_matrix, how='left', rsuffix='_right')
