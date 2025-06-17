@@ -144,6 +144,8 @@ class CombinedReporter:
             protein_name = best_protein['protein_name']
             proteins[i] = protein_name
             protein_split = protein_name.split('|')
+            if len(protein_split) < 3:
+                protein_split = protein_split + [''] * (3 - len(protein_split))
             protein_ids[i] = self.decoy_prefix + protein_split[1] if protein_name.startswith(self.decoy_prefix) else protein_split[1]
             entry_names[i] = self.decoy_prefix + protein_split[2] if protein_name.startswith(self.decoy_prefix) else protein_split[2]
             genes[i] = best_protein['gene_name']
@@ -297,7 +299,7 @@ class CombinedReporter:
         cols = list(combined_df.columns[:13]) + spectral_count_cols + binder_cols + allele_cols
         combined_df = combined_df[cols]
 
-        print('Saving unfiltered combined {group_key}s to combined_{group_key}_unfiltered.tsv. Will be removed in final version.')
+        print(f'Saving unfiltered combined {group_key}s to combined_{group_key}_unfiltered.tsv. Will be removed in final version.')
         combined_df.to_csv(self.result_folder / f'combined_{group_key}_unfiltered.tsv', sep='\t', index=False)
         if self.combined_high_confidence_sequences is not None:
             combined_len = len(combined_df)
@@ -360,11 +362,11 @@ class CombinedReporter:
 
 
 if __name__ == '__main__':
-    combined_reporter = CombinedReporter(result_folder='/mnt/d/workspace/mhc-booster/experiment/JY_500M/mhcbooster_0521/mhcbooster',
-                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human.fasta',
-                                         infer_protein=False,
+    combined_reporter = CombinedReporter(result_folder='/mnt/d/data/JY100M_Val_DDA_102824/mhcbooster',
+                                         fasta_path='/mnt/d/data/JY_1_10_25M/2024-09-03-decoys-contam-Human_EBV_GD1_B95.fasta',
+                                         infer_protein=True,
                                          remove_contaminant=False)
-    # combined_reporter.run()
-    combined_reporter.get_philosopher_reference()
-    combined_reporter.combine_result('peptide.tsv')
-    combined_reporter.combine_result('sequence.tsv')
+    combined_reporter.run()
+    # combined_reporter.get_philosopher_reference()
+    # combined_reporter.combine_result('peptide.tsv')
+    # combined_reporter.combine_result('sequence.tsv')
