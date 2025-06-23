@@ -231,10 +231,12 @@ def run():
 
     input_files = args.input
     if len(input_files) == 1 and os.path.isdir(input_files[0]):
-        input_files = list(Path(input_files[0]).rglob('*.pin'))
+        all_input_files = list(Path(input_files[0]).rglob('*.pin'))
         edited_input_files = list(Path(input_files[0]).rglob('*_edited.pin'))
-        if len(edited_input_files) != len(input_files):
-            input_files = [f for f in input_files if not f.stem.endswith('_edited')]
+        if len(edited_input_files) != len(all_input_files):
+            input_files = [f for f in all_input_files if not f.stem.endswith('_edited')]
+        else:
+            input_files = edited_input_files
         input_files = sorted(input_files, key=lambda f: -f.stat().st_size)
 
     alleles = []
