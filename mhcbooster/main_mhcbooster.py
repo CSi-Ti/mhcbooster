@@ -241,7 +241,7 @@ class MHCBooster:
 
         # High prob indices
         self.high_prob_indices = None
-        qs_threshold = 0.001
+        qs_threshold = 0.0001
         max_qs_threshold = 0.01
         min_points = 100
 
