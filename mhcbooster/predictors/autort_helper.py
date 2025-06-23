@@ -77,23 +77,26 @@ class AutortHelper(BasePredictorHelper):
 
         # Perform fine_tuning
         if self.fine_tune:
-            with tempfile.NamedTemporaryFile('w', delete=False) as train_file:
-                # Prepare file for fine-tuning
-                autort_cal_df = self.peptide_df[self.high_prob_indices]
+            fine_tuned_model_folder = Path(self.report_directory).parent / 'fine_tuned_models' / 'AutoRT'
+            if fine_tuned_model_folder.exists():
+                self.model_path = fine_tuned_model_folder / 'model.json'
+            else:
+                with tempfile.NamedTemporaryFile('w', delete=False) as train_file:
+                    # Prepare file for fine-tuning
+                    autort_cal_df = self.peptide_df[self.high_prob_indices]
 
-                autort_input = pd.DataFrame()
-                autort_input['x'] = autort_cal_df['sequence']
-                autort_input['y'] = autort_cal_df['retention_time']
-                autort_input['mod'] = '' # TODO add mods
-                autort_input.to_csv(train_file, sep='\t', index=False, header=True)
+                    autort_input = pd.DataFrame()
+                    autort_input['x'] = autort_cal_df['sequence']
+                    autort_input['y'] = autort_cal_df['retention_time']
+                    autort_input['mod'] = '' # TODO add mods
+                    autort_input.to_csv(train_file, sep='\t', index=False, header=True)
 
-                fine_tuned_model_path = self.autort_root / 'models' / 'fine_tuned_model'
-                command = f'python {autort_exe_path} train -i {train_file.name} -m {self.model_path} -o {fine_tuned_model_path} -rlr'
-                command = 'source ~/.bashrc; conda run -n autort --no-capture-output ' + command
-                print('Fine-tuning AutoRT. It may take several minutes...')
-                print(command)
-                subprocess.run(command, shell=True)
-                self.model_path = fine_tuned_model_path / 'model.json'
+                    command = f'python {autort_exe_path} train -i {train_file.name} -m {self.model_path} -o {fine_tuned_model_folder} -rlr'
+                    command = 'source ~/.bashrc; conda run -n autort --no-capture-output ' + command
+                    print('Fine-tuning AutoRT. It may take several minutes...')
+                    print(command)
+                    subprocess.run(command, shell=True)
+                    self.model_path = fine_tuned_model_folder / 'model.json'
 
         # Prepare file for prediction
         with tempfile.NamedTemporaryFile('w', delete=False) as input_file:
