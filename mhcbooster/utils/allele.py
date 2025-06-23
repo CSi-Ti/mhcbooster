@@ -25,6 +25,7 @@ def prepare_class_I_alleles(alleles: List[str], avail_alleles: List[str]):
 
 
 def prepare_class_II_alleles(alleles: List[str], avail_alleles: List[str]):
+    alleles = [allele.replace('HLA-', '') for allele in alleles]
     avail_alleles.sort()
     allele_keywords = ['DRB', 'DQA', 'DQB', 'DPA', 'DPB', 'H-2']
     allele_map = {key: [] for key in allele_keywords}
