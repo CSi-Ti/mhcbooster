@@ -608,12 +608,18 @@ class MHCBooster:
             pep_fdr: float = 1,
             seq_fdr: float = 1,
             remove_decoy: bool = False,
+            force_rerun=True,
             **kwargs):
 
 
         self.report_directory = str(report_directory)
         report_directory = Path(report_directory)
         report_directory.mkdir(parents=True, exist_ok=True)
+
+        # Skip processing if results already exist
+        if not force_rerun and (report_directory / 'peptide.tsv').exists():
+            print(f'Results already exist in {report_directory}. Skipping reprocessing.')
+            return
 
         if clear_session:
             K.clear_session()

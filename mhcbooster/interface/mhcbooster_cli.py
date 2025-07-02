@@ -286,7 +286,8 @@ def run():
                  pep_fdr=args.pep_fdr,
                  seq_fdr=args.seq_fdr,
                  remove_decoy=args.remove_decoy,
-                 fasta_path=args.fasta_path)
+                 fasta_path=args.fasta_path,
+                 force_rerun=False)
 
         if args.auto_pred:
             args.rt_predictors = mhcb.rt_predictors
